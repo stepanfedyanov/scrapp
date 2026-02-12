@@ -1,0 +1,156 @@
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from rest_framework import serializers
+
+from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration
+
+
+User = get_user_model()
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email')
+
+
+class RegisterSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, min_length=8)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'password')
+
+    def create(self, validated_data):
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            email=validated_data.get('email', ''),
+            password=validated_data['password'],
+        )
+        return user
+
+
+class IntegrationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Integration
+        fields = (
+            'id',
+            'name',
+            'provider',
+            'config',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('created_at', 'updated_at')
+
+
+class BlogIntegrationSerializer(serializers.ModelSerializer):
+    integration = IntegrationSerializer(read_only=True)
+    integration_id = serializers.PrimaryKeyRelatedField(
+        source='integration',
+        queryset=Integration.objects.alive(),
+        write_only=True,
+    )
+
+    class Meta:
+        model = BlogIntegration
+        fields = (
+            'id',
+            'integration',
+            'integration_id',
+            'enabled',
+            'settings',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('created_at', 'updated_at')
+
+
+class NoteIntegrationSerializer(serializers.ModelSerializer):
+    integration = IntegrationSerializer(read_only=True)
+    integration_id = serializers.PrimaryKeyRelatedField(
+        source='integration',
+        queryset=Integration.objects.alive(),
+        write_only=True,
+    )
+    note_id = serializers.PrimaryKeyRelatedField(
+        source='note', queryset=Note.objects.alive(), write_only=True
+    )
+
+    class Meta:
+        model = NoteIntegration
+        fields = (
+            'id',
+            'note_id',
+            'integration',
+            'integration_id',
+            'enabled',
+            'use_blog_defaults',
+            'settings',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('created_at', 'updated_at')
+
+
+class BlogSerializer(serializers.ModelSerializer):
+    owner = UserSerializer(read_only=True)
+    blog_integrations = BlogIntegrationSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Blog
+        fields = (
+            'id',
+            'title',
+            'owner',
+            'blog_integrations',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('created_at', 'updated_at')
+
+
+class NoteSerializer(serializers.ModelSerializer):
+    blog = BlogSerializer(read_only=True)
+    blog_id = serializers.PrimaryKeyRelatedField(
+        source='blog',
+        queryset=Blog.objects.alive(),
+        write_only=True,
+        required=False,
+    )
+    note_integrations = NoteIntegrationSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Note
+        fields = (
+            'id',
+            'blog',
+            'blog_id',
+            'title',
+            'body',
+            'status',
+            'scheduled_at',
+            'published_at',
+            'archived_at',
+            'note_integrations',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('created_at', 'updated_at')
+
+    def validate(self, attrs):
+        status = attrs.get('status')
+        scheduled_at = attrs.get('scheduled_at')
+        if status == Note.STATUS_SCHEDULED and not scheduled_at:
+            raise serializers.ValidationError(
+                {'scheduled_at': 'Required for scheduled notes.'}
+            )
+        return attrs
+
+    def update(self, instance, validated_data):
+        status = validated_data.get('status')
+        if status == Note.STATUS_PUBLISHED and instance.published_at is None:
+            instance.published_at = timezone.now()
+        if status == Note.STATUS_ARCHIVED and instance.archived_at is None:
+            instance.archived_at = timezone.now()
+        return super().update(instance, validated_data)
