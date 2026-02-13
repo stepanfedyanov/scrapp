@@ -1,3 +1,5 @@
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -27,10 +29,16 @@ class SoftDeleteModel(models.Model):
 
 
 class Blog(SoftDeleteModel):
-    owner = models.OneToOneField(
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+    )
+    owner = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
-        related_name='blog',
+        related_name='blogs',
     )
     title = models.CharField(max_length=200, default='My Blog')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -63,6 +71,12 @@ class Integration(SoftDeleteModel):
 
 
 class Note(SoftDeleteModel):
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True,
+    )
     STATUS_DRAFT = 'draft'
     STATUS_SCHEDULED = 'scheduled'
     STATUS_PUBLISHED = 'published'

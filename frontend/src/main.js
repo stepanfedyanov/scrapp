@@ -4,9 +4,9 @@ import PrimeVue from 'primevue/config'
 import Aura from '@primevue/themes/aura'
 import { definePreset } from '@primevue/themes'
 import 'primeicons/primeicons.css'
-import './style.css'
-import App from './App.vue'
-import router from './router'
+import '~/src/app/styles/index.scss'
+import App from '~/src/app/App.vue'
+import router from '~/src/app/router'
 
 const AquaPreset = definePreset(Aura, {
 	semantic: {

@@ -51,11 +51,17 @@ class BlogIntegrationSerializer(serializers.ModelSerializer):
         queryset=Integration.objects.alive(),
         write_only=True,
     )
+    blog_id = serializers.PrimaryKeyRelatedField(
+        source='blog',
+        queryset=Blog.objects.alive(),
+        write_only=True,
+    )
 
     class Meta:
         model = BlogIntegration
         fields = (
             'id',
+            'blog_id',
             'integration',
             'integration_id',
             'enabled',
@@ -101,6 +107,7 @@ class BlogSerializer(serializers.ModelSerializer):
         model = Blog
         fields = (
             'id',
+            'uuid',
             'title',
             'owner',
             'blog_integrations',
@@ -112,11 +119,11 @@ class BlogSerializer(serializers.ModelSerializer):
 
 class NoteSerializer(serializers.ModelSerializer):
     blog = BlogSerializer(read_only=True)
-    blog_id = serializers.PrimaryKeyRelatedField(
+    blog_uuid = serializers.SlugRelatedField(
         source='blog',
+        slug_field='uuid',
         queryset=Blog.objects.alive(),
         write_only=True,
-        required=False,
     )
     note_integrations = NoteIntegrationSerializer(many=True, read_only=True)
 
@@ -124,8 +131,9 @@ class NoteSerializer(serializers.ModelSerializer):
         model = Note
         fields = (
             'id',
+            'uuid',
             'blog',
-            'blog_id',
+            'blog_uuid',
             'title',
             'body',
             'status',

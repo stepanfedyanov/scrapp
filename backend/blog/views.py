@@ -25,32 +25,43 @@ class RegisterViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
 class BlogViewSet(viewsets.ModelViewSet):
     serializer_class = BlogSerializer
     permission_classes = [IsOwner]
+    lookup_field = 'uuid'
 
     def get_queryset(self):
         return Blog.objects.alive().filter(owner=self.request.user)
 
-    def list(self, request, *args, **kwargs):
-        blog = self.get_queryset().first()
-        if not blog:
-            return Response([], status=status.HTTP_200_OK)
-        serializer = self.get_serializer(blog)
-        return Response([serializer.data])
+    def perform_create(self, serializer):
+        serializer.save(owner=self.request.user)
+
+    def destroy(self, request, *args, **kwargs):
+        blog = self.get_object()
+        blog.is_deleted = True
+        blog.deleted_at = timezone.now()
+        blog.save(update_fields=['is_deleted', 'deleted_at'])
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class NoteViewSet(viewsets.ModelViewSet):
     serializer_class = NoteSerializer
     permission_classes = [IsOwner]
+    lookup_field = 'uuid'
 
     def get_queryset(self):
-        return (
+        queryset = (
             Note.objects.alive()
             .filter(blog__owner=self.request.user)
             .select_related('blog')
         )
+        blog_uuid = self.request.query_params.get('blog_uuid')
+        if blog_uuid:
+            queryset = queryset.filter(blog__uuid=blog_uuid)
+        return queryset
 
     def perform_create(self, serializer):
-        blog = Blog.objects.alive().filter(owner=self.request.user).first()
-        serializer.save(blog=blog)
+        blog = serializer.validated_data['blog']
+        if blog.owner_id != self.request.user.id:
+            raise PermissionDenied('Invalid blog owner')
+        serializer.save()
 
     def destroy(self, request, *args, **kwargs):
         note = self.get_object()
@@ -100,9 +111,9 @@ class BlogIntegrationViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        blog = Blog.objects.alive().filter(owner=self.request.user).first()
+        blog = serializer.validated_data['blog']
         integration = serializer.validated_data['integration']
-        if integration.owner_id != self.request.user.id:
+        if blog.owner_id != self.request.user.id or integration.owner_id != self.request.user.id:
             raise PermissionDenied('Invalid integration owner')
         serializer.save(blog=blog)
 
