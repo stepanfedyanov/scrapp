@@ -56,8 +56,9 @@ jobs:
           username: ${{ secrets.SSH_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            ls -la
-            cp docker-compose.yml /var/www/scrapp/docker-compose.yml
+            cat <<EOF > docker-compose.yml
+            ${{ secrets.DOCKER_COMPOSE_CONTENT || '' }}$(cat docker-compose.yml)
+            EOF
             cd /var/www/scrapp
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull
