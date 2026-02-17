@@ -1,103 +1,290 @@
-<!-- Use this file to provide workspace-specific custom instructions to Copilot. For more details, visit https://code.visualstudio.com/docs/copilot/copilot-customization#_use-a-githubcopilotinstructionsmd-file -->
-- [x] Verify that the copilot-instructions.md file in the .github directory is created.
+# Scrapp Project Guidelines
 
-- [x] Clarify Project Requirements
-	<!-- Ask for project type, language, and frameworks if not specified. Skip if already provided. -->
+## Architecture: Feature-Sliced Design (FSD)
 
-- [x] Scaffold the Project
-	<!--
-	Ensure that the previous step has been marked as completed.
-	Call project setup tool with projectType parameter.
-	Run scaffolding command to create project files and folders.
-	Use '.' as the working directory.
-	If no appropriate projectType is available, search documentation using available tools.
-	Otherwise, create the project structure manually using available file creation tools.
-	-->
+The frontend uses strict Feature-Sliced Design architecture with the following layer hierarchy:
 
-- [x] Customize the Project
-	<!--
-	Verify that all previous steps have been completed successfully and you have marked the step as completed.
-	Develop a plan to modify codebase according to user requirements.
-	Apply modifications using appropriate tools and user-provided references.
-	Skip this step for "Hello World" projects.
-	-->
+### Layer Structure
 
-- [x] Install Required Extensions
-	<!-- ONLY install extensions provided mentioned in the get_project_setup_info. Skip this step otherwise and mark as completed. -->
+1. **app** - Application shell
+   - Router setup
+   - Global shell layout (App.vue)
+   - Public API exports all router functionality
 
-- [x] Compile the Project
-	<!--
-	Verify that all previous steps have been completed.
-	Install any missing dependencies.
-	Run diagnostics and resolve any issues.
-	Check for markdown files in project folder for relevant instructions on how to do this.
-	-->
+2. **pages** - Page-level components (routes)
+   - Thin wrapper components
+   - Use only widget/feature public APIs
+   - Structure: `pages/{page-name}/ui/{PageName}.vue`
+   - Public API: `pages/{page-name}/index.js` exports the page component
 
-- [x] Create and Run Task
-	<!--
-	Verify that all previous steps have been completed.
-	Check https://code.visualstudio.com/docs/debugtest/tasks to determine if the project needs a task. If so, use the create_and_run_task to create and launch a task based on package.json, README.md, and project structure.
-	Skip this step otherwise.
-	 -->
+3. **widgets** - Complex domain-independent UI components
+   - Composed of features and entities
+   - Business logic orchestration at widget level
+   - Structure: `widgets/{widget-name}/ui/{WidgetName}.vue`
+   - Public API: `widgets/{widget-name}/index.js` exports the component
 
-- [x] Launch the Project
-	<!--
-	Verify that all previous steps have been completed.
-	Prompt user for debug mode, launch only if confirmed.
-	 -->
+4. **features** - User interaction features or business workflows
+   - Example: auth (login/register forms)
+   - Structure: `features/{feature-name}/ui/{FeatureName}.vue`
+   - Public API: `features/{feature-name}/index.js` exports the component(s)
 
-- [ ] Ensure Documentation is Complete
-	<!--
-	Verify that all previous steps have been completed.
-	Verify that README.md and the copilot-instructions.md file in the .github directory exists and contains current project information.
-	Clean up the copilot-instructions.md file in the .github directory by removing all HTML comments.
-	 -->
+5. **entities** - Business domain entities
+   - Pinia stores for state management
+   - Structure: `entities/{entity-name}/model/{store-name}.js`
+   - Public API: `entities/{entity-name}/index.js` exports stores
+   - Examples: user (auth store), blog, note
 
-<!--
-## Execution Guidelines
-PROGRESS TRACKING:
-- If any tools are available to manage the above todo list, use it to track progress through this checklist.
-- After completing each step, mark it complete and add a summary.
-- Read current todo list status before starting each new step.
+6. **shared** - Shared utilities and infrastructure
+   - API client (`shared/api/client.js`)
+   - Utilities and helpers
+   - Public API: `shared/api/index.js` exports `api` client
+   - Public API: `shared/{segment}/index.js` exports utilities
 
-COMMUNICATION RULES:
-- Avoid verbose explanations or printing full command outputs.
-- If a step is skipped, state that briefly (e.g. "No extensions needed").
-- Do not explain project structure unless asked.
-- Keep explanations concise and focused.
+### Public API Rules
 
-DEVELOPMENT RULES:
-- Use '.' as the working directory unless user specifies otherwise.
-- Avoid adding media or external links unless explicitly requested.
-- Use placeholders only with a note that they should be replaced.
-- Use VS Code API tool only for VS Code extension projects.
-- Once the project is created, it is already opened in Visual Studio Code—do not suggest commands to open this project in Visual Studio again.
-- If the project setup information has additional rules, follow them strictly.
+- Each segment (entities, pages, widgets, features) **must have** an `index.js` file
+- Use **only public APIs** when importing between layers - no deep imports
+- Deep imports (e.g., `from '~/src/entities/user/model/auth'`) are **forbidden**
+- Import pattern: `import { SomeComponent } from '~/src/widgets/some-widget'`
 
-FOLDER CREATION RULES:
-- Always use the current directory as the project root.
-- If you are running any terminal commands, use the '.' argument to ensure that the current working directory is used ALWAYS.
-- Do not create a new folder unless the user explicitly requests it besides a .vscode folder for a tasks.json file.
-- If any of the scaffolding commands mention that the folder name is not correct, let the user know to create a new folder with the correct name and then reopen it again in vscode.
+### Component Organization
 
-EXTENSION INSTALLATION RULES:
-- Only install extension specified by the get_project_setup_info tool. DO NOT INSTALL any other extensions.
+- UI components go in `ui/` subdirectory
+- Model/stores go in `model/` subdirectory
+- Each component file is singular and capitalized: `BlogsDashboard.vue`, not `BlogsDashboards.vue`
 
-PROJECT CONTENT RULES:
-- If the user has not specified project details, assume they want a "Hello World" project as a starting point.
-- Avoid adding links of any type (URLs, files, folders, etc.) or integrations that are not explicitly required.
-- Avoid generating images, videos, or any other media files unless explicitly requested.
-- If you need to use any media assets as placeholders, let the user know that these are placeholders and should be replaced with the actual assets later.
-- Ensure all generated components serve a clear purpose within the user's requested workflow.
-- If a feature is assumed but not confirmed, prompt the user for clarification before including it.
-- If you are working on a VS Code extension, use the VS Code API tool with a query to find relevant VS Code API references and samples related to that query.
+### Layer Dependencies
 
-TASK COMPLETION RULES:
-- Your task is complete when:
-  - Project is successfully scaffolded and compiled without errors
-  - copilot-instructions.md file in the .github directory exists in the project
-  - README.md file exists and is up to date
-  - User is provided with clear instructions to debug/launch the project
+|        | Can import from          |
+|--------|--------------------------|
+| app    | pages, shared            |
+| pages  | widgets, features, entities, shared |
+| widgets| features, entities, shared |
+| features | entities, shared |
+| entities | shared           |
+| shared | (nothing)        |
+
+### Technology Stack
+
+- **Framework**: Vue 3 (Composition API)
+- **Build tool**: Vite
+- **UI Library**: PrimeVue
+- **State management**: Pinia
+- **Routing**: Vue Router
+- **HTTP client**: Axios (via `shared/api`)
+- **Styling**: SCSS (scoped)
+
+### Naming Conventions
+
+- Components: PascalCase (`BlogsPage.vue`, `NoteEditor.vue`)
+- Stores: `use{EntityName}Store` (`useAuthStore`, `useBlogsStore`)
+- Files/folders: kebab-case (`blogs-dashboard`, `note-editor`)
+- Imports: Use alias `~/src` for absolute paths
+
+### No Legacy Code
+
+Do not leave any legacy files or folders. All old code must be removed when refactoring.
+
+## Docker Compose Setup
+
+The project includes two Docker Compose configurations:
+
+### Production Compose (`docker-compose.yml`)
+
+Runs backend and frontend services in production mode:
+
+```bash
+docker-compose up -d
+```
+
+Services:
+- **backend** - Django API server (port 8000)
+- **frontend** - Vue.js app built with Vite (port 5173)
+
+### Development Compose (`docker-compose.dev.yml`)
+
+Runs services with development settings (hot-reload, debug mode):
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d
+```
+
+Use this for active development with live reloading.
+
+### Common Commands
+
+```bash
+docker-compose ps                           # View running services
+docker-compose logs -f backend              # Follow backend logs
+docker-compose logs -f frontend             # Follow frontend logs
+docker-compose down                         # Stop all services
+docker-compose down -v                      # Stop and remove volumes
+```
+
+## Backend Architecture
+
+Backend is a Django REST Framework (DRF) API server with JWT authentication.
+
+### Project Structure
+
+```
+backend/
+├── config/              # Project configuration
+│   ├── settings.py     # Django settings (DB, AUTH, CORS, etc.)
+│   ├── urls.py         # Main URL routes (api/)
+│   ├── wsgi.py         # WSGI application
+│   └── asgi.py         # ASGI application
+├── blog/               # Main Django app
+│   ├── models.py       # Data models
+│   ├── views.py        # API ViewSets
+│   ├── serializers.py  # DRF Serializers
+│   ├── permissions.py  # Custom permissions (IsOwner)
+│   ├── urls.py         # App URL routes (REST endpoints)
+│   ├── signals.py      # Django signals
+│   ├── migrations/     # Database migrations
+│   └── admin.py        # Django admin configuration
+├── manage.py           # Django management script
+├── requirements.txt    # Python dependencies
+└── Dockerfile          # Container configuration
+```
+
+### Technology Stack
+
+- **Framework**: Django 6.0
+- **API**: Django REST Framework (DRF) 3.16
+- **Authentication**: JWT (djangorestframework-simplejwt)
+- **Database**: PostgreSQL (with fallback to SQLite)
+- **CORS**: django-cors-headers
+- **Server**: Gunicorn
+
+### Database Models
+
+#### User (Django built-in)
+- Standard Django User model
+- Username, email, password
+- Used as owner for blogs, notes, integrations
+
+#### Blog
+- `uuid` - Unique identifier (indexed)
+- `owner` - Foreign key to User
+- `title` - Blog title
+- `created_at`, `updated_at` - Timestamps
+- Soft delete support via `is_deleted`, `deleted_at`
+
+#### Note
+- `uuid` - Unique identifier (indexed)
+- `blog` - Foreign key to Blog
+- `title`, `body` - Content
+- `status` - One of: draft, scheduled, published, archived, deleted
+- `scheduled_at`, `published_at`, `archived_at` - Timestamps
+- Soft delete support
+
+#### Integration
+- `owner` - Foreign key to User
+- `name` - Integration name
+- `provider` - One of: medium, devto, telegram
+- `config` - JSONField for integration settings
+- Soft delete support
+
+#### BlogIntegration (junction table)
+- `blog` - Foreign key to Blog
+- `integration` - Foreign key to Integration
+- `enabled` - Boolean flag
+- `settings` - JSONField for blog-specific integration settings
+- Unique constraint on (blog, integration)
+
+#### NoteIntegration (junction table)
+- `note` - Foreign key to Note
+- `integration` - Foreign key to Integration
+- `enabled` - Boolean flag
+- `use_blog_defaults` - Whether to use blog-level settings
+- `settings` - JSONField for note-specific integration settings
+- Unique constraint on (note, integration)
+
+### API Endpoints
+
+Base URL: `/api/`
+
+#### Authentication
+- `POST /api/auth/register/` - Register new user
+- `POST /api/auth/token/` - Obtain JWT tokens (username + password)
+- `POST /api/auth/refresh/` - Refresh access token using refresh token
+
+#### Blogs
+- `GET /api/blogs/` - List user's blogs
+- `POST /api/blogs/` - Create new blog
+- `GET /api/blogs/{uuid}/` - Get blog details
+- `PATCH /api/blogs/{uuid}/` - Update blog
+- `DELETE /api/blogs/{uuid}/` - Soft delete blog
+
+#### Notes
+- `GET /api/notes/` - List user's notes (filter by `blog_uuid` query param)
+- `POST /api/notes/` - Create new note
+- `GET /api/notes/{uuid}/` - Get note details
+- `PATCH /api/notes/{uuid}/` - Update note
+- `DELETE /api/notes/{uuid}/` - Soft delete note
+- `POST /api/notes/{uuid}/archive/` - Archive note (custom action)
+
+#### Integrations
+- `GET /api/integrations/` - List user's integrations
+- `POST /api/integrations/` - Create new integration
+- `GET /api/integrations/{id}/` - Get integration details
+- `PATCH /api/integrations/{id}/` - Update integration
+- `DELETE /api/integrations/{id}/` - Soft delete integration
+
+#### Blog Integrations
+- `GET /api/blog-integrations/` - List blog-integration relationships
+- `POST /api/blog-integrations/` - Create blog-integration relationship
+- `PATCH /api/blog-integrations/{id}/` - Update blog-integration
+- `DELETE /api/blog-integrations/{id}/` - Remove blog-integration
+
+#### Note Integrations
+- `GET /api/note-integrations/` - List note-integration relationships
+- `POST /api/note-integrations/` - Create note-integration relationship
+- `PATCH /api/note-integrations/{id}/` - Update note-integration
+- `DELETE /api/note-integrations/{id}/` - Remove note-integration
+
+### Authentication & Authorization
+
+**JWT Authentication**
+- AccessToken lifetime: 30 minutes
+- RefreshToken lifetime: 7 days
+- Tokens obtained via `/api/auth/token/` endpoint with username + password
+
+**Permissions**
+- `IsOwner` - Custom permission in `permissions.py`
+  - For Blog/Integration: checks if `obj.owner == request.user`
+  - For Note/BlogIntegration/NoteIntegration: checks if `obj.blog.owner == request.user`
+- All endpoints except registration require authentication
+- Each user can only access their own resources
+
+### Soft Delete Pattern
+
+Custom `SoftDeleteModel` abstract class implements soft deletion:
+- `is_deleted` - Boolean flag (default: False)
+- `deleted_at` - DateTime stamp
+- `QuerySet.alive()` - Filter non-deleted objects
+- `QuerySet.deleted()` - Filter deleted objects
+- Models override `delete()` method to mark as deleted instead of removing
+
+### Development Guidelines
+
+- Always check user permissions in `get_queryset()` methods
+- Use `perform_create()` to automatically set the owner
+- Check ownership in `perform_create()` for foreign key relationships
+- Use soft delete instead of hard delete
+- Avoid N+1 queries - use `select_related()` and `prefetch_related()`
+- All JSONField data in integrations should be validated before saving
+- Use custom actions (via `@action` decorator) for non-standard operations
+
+## Frontend Development Guidelines
+
+- Keep pages as thin as possible (just route handlers and layout)
+- Move all logic to widgets, features, or entities
+- Use Pinia stores for all state management
+- Use `shared/api` client for all HTTP requests
+- Follow Vue 3 Composition API patterns
+- Use scoped SCSS for component styling
 
 Before starting a new task in the above plan, update progress in the plan.
 -->
