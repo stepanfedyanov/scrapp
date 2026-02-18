@@ -5,14 +5,16 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration
+from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent
 from .permissions import IsOwner
 from .serializers import (
     BlogIntegrationSerializer,
     BlogSerializer,
     IntegrationSerializer,
+    NoteHeaderSerializer,
     NoteIntegrationSerializer,
     NoteSerializer,
+    NoteTextContentSerializer,
     RegisterSerializer,
 )
 
@@ -51,6 +53,7 @@ class NoteViewSet(viewsets.ModelViewSet):
             Note.objects.alive()
             .filter(blog__owner=self.request.user)
             .select_related('blog')
+            .prefetch_related('headers', 'text_contents')
         )
         blog_uuid = self.request.query_params.get('blog_uuid')
         if blog_uuid:
@@ -152,3 +155,55 @@ class NoteIntegrationViewSet(viewsets.ModelViewSet):
         record.deleted_at = timezone.now()
         record.save(update_fields=['is_deleted', 'deleted_at'])
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class NoteHeaderViewSet(
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = NoteHeaderSerializer
+    permission_classes = [IsOwner]
+
+    def get_queryset(self):
+        queryset = NoteHeader.objects.filter(
+            note__blog__owner=self.request.user
+        ).select_related('note')
+        note_uuid = self.request.query_params.get('note_uuid')
+        if note_uuid:
+            queryset = queryset.filter(note__uuid=note_uuid)
+        return queryset
+
+    def perform_create(self, serializer):
+        note = serializer.validated_data['note']
+        if note.blog.owner_id != self.request.user.id:
+            raise PermissionDenied('Invalid note owner')
+        serializer.save()
+
+
+class NoteTextContentViewSet(
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.DestroyModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
+):
+    serializer_class = NoteTextContentSerializer
+    permission_classes = [IsOwner]
+
+    def get_queryset(self):
+        queryset = NoteTextContent.objects.filter(
+            note__blog__owner=self.request.user
+        ).select_related('note')
+        note_uuid = self.request.query_params.get('note_uuid')
+        if note_uuid:
+            queryset = queryset.filter(note__uuid=note_uuid)
+        return queryset
+
+    def perform_create(self, serializer):
+        note = serializer.validated_data['note']
+        if note.blog.owner_id != self.request.user.id:
+            raise PermissionDenied('Invalid note owner')
+        serializer.save()

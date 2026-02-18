@@ -24,9 +24,9 @@ const logout = () => {
     </template>
     <template #end>
       <div v-if="showNav" class="nav">
-        <Button label="Блоги" text @click="$router.push('/blogs')" />
-        <Button label="Интеграции" text @click="$router.push('/integrations')" />
-        <Button label="Выйти" severity="danger" text @click="logout" />
+        <Button :label="$t('nav.blogs')" text @click="$router.push('/blogs')" />
+        <Button :label="$t('nav.integrations')" text @click="$router.push('/integrations')" />
+        <Button :label="$t('nav.logout')" severity="danger" text @click="logout" />
       </div>
     </template>
   </Toolbar>

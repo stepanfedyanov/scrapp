@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useBlogsStore } from '~/src/entities/blog'
 import { useNotesStore } from '~/src/entities/note'
 import Button from 'primevue/button'
@@ -14,6 +15,7 @@ import Tag from 'primevue/tag'
 import Dropdown from 'primevue/dropdown'
 
 const router = useRouter()
+const { t } = useI18n()
 const store = useBlogsStore()
 const notesStore = useNotesStore()
 const dialog = ref(false)
@@ -24,17 +26,17 @@ const blogFilter = ref('all')
 const statusFilter = ref('all')
 
 const blogOptions = computed(() => [
-  { label: 'Все блоги', value: 'all' },
+  { label: t('blogs.allBlogs'), value: 'all' },
   ...store.blogs.map((blog) => ({ label: blog.title, value: blog.uuid }))
 ])
 
-const statusOptions = [
-  { label: 'Все статусы', value: 'all' },
-  { label: 'Заметка', value: 'draft' },
-  { label: 'Запланировано', value: 'scheduled' },
-  { label: 'Опубликовано', value: 'published' },
-  { label: 'В архиве', value: 'archived' }
-]
+const statusOptions = computed(() => [
+  { label: t('status.all'), value: 'all' },
+  { label: t('status.draft'), value: 'draft' },
+  { label: t('status.scheduled'), value: 'scheduled' },
+  { label: t('status.published'), value: 'published' },
+  { label: t('status.archived'), value: 'archived' },
+])
 
 const filteredNotes = computed(() => {
   let items = notesStore.notes
@@ -52,7 +54,7 @@ const openNotes = (blogUuid) => {
 }
 
 const createBlog = async () => {
-  const blog = await store.createBlog({ title: form.title || 'Новый блог' })
+  const blog = await store.createBlog({ title: form.title || t('blogs.defaultTitle') })
   dialog.value = false
   form.title = ''
   openNotes(blog.uuid)
@@ -72,8 +74,8 @@ onMounted(() => {
   <div class="page">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2>Блоги</h2>
-        <Button label="Создать блог" icon="pi pi-plus" @click="dialog = true" />
+        <h2>{{ $t('blogs.title') }}</h2>
+        <Button :label="$t('blogs.createBlog')" icon="pi pi-plus" @click="dialog = true" />
       </div>
 
       <div v-if="store.loading" style="display: flex; justify-content: center; padding: 24px;">
@@ -87,24 +89,24 @@ onMounted(() => {
           </template>
           <template #content>
             <div style="color: #6b7280; margin-bottom: 12px;">
-              Обновлено: {{ new Date(blog.updated_at).toLocaleString() }}
+              {{ $t('blogs.updatedAt', { date: new Date(blog.updated_at).toLocaleString() }) }}
             </div>
             <div class="blog-card-actions">
-              <Button label="Заметки" text @click="openNotes(blog.uuid)" />
-              <Button label="Удалить" text severity="danger" @click="removeBlog(blog.uuid)" />
+              <Button :label="$t('blogs.notes')" text @click="openNotes(blog.uuid)" />
+              <Button :label="$t('common.delete')" text severity="danger" @click="removeBlog(blog.uuid)" />
             </div>
           </template>
         </Card>
       </div>
 
       <div v-if="!store.loading && store.blogs.length === 0" style="text-align: center; color: #6b7280; padding: 24px;">
-        Блогов пока нет
+        {{ $t('blogs.noBlogsYet') }}
       </div>
     </div>
 
     <div class="card" style="margin-top: 16px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2>Заметки</h2>
+        <h2>{{ $t('notes.title') }}</h2>
       </div>
 
       <div style="display: flex; gap: 12px; margin-bottom: 16px;">
@@ -113,7 +115,7 @@ onMounted(() => {
           :options="blogOptions"
           optionLabel="label"
           optionValue="value"
-          placeholder="Блог"
+          :placeholder="$t('common.blog')"
           style="width: 240px;"
         />
         <Dropdown
@@ -121,7 +123,7 @@ onMounted(() => {
           :options="statusOptions"
           optionLabel="label"
           optionValue="value"
-          placeholder="Статус"
+          :placeholder="$t('common.status')"
           style="width: 220px;"
         />
       </div>
@@ -131,34 +133,34 @@ onMounted(() => {
         :loading="notesStore.loading"
         responsiveLayout="scroll"
       >
-        <Column header="Заголовок">
+        <Column :header="$t('common.title')">
           <template #body="{ data }">
             <button class="note-title-link" type="button" @click="router.push(`/notes/${data.uuid}`)">
-              {{ data.title || 'Без названия' }}
+              {{ data.title || $t('common.untitled') }}
             </button>
           </template>
         </Column>
-        <Column header="Блог" style="width: 220px;">
+        <Column :header="$t('common.blog')" style="width: 220px;">
           <template #body="{ data }">
             {{ data.blog?.title || '—' }}
           </template>
         </Column>
-        <Column header="Статус" style="width: 180px;">
+        <Column :header="$t('common.status')" style="width: 180px;">
           <template #body="{ data }">
-            <Tag v-if="data.status === 'draft'" severity="info">Заметка</Tag>
-            <Tag v-else-if="data.status === 'scheduled'" severity="warning">Запланировано</Tag>
-            <Tag v-else-if="data.status === 'published'" severity="success">Опубликовано</Tag>
-            <Tag v-else severity="secondary">В архиве</Tag>
+            <Tag v-if="data.status === 'draft'" severity="info">{{ $t('status.draft') }}</Tag>
+            <Tag v-else-if="data.status === 'scheduled'" severity="warning">{{ $t('status.scheduled') }}</Tag>
+            <Tag v-else-if="data.status === 'published'" severity="success">{{ $t('status.published') }}</Tag>
+            <Tag v-else severity="secondary">{{ $t('status.archived') }}</Tag>
           </template>
         </Column>
-        <Column header="Обновлено" style="width: 220px;">
+        <Column :header="$t('common.updated')" style="width: 220px;">
           <template #body="{ data }">
             {{ new Date(data.updated_at).toLocaleString() }}
           </template>
         </Column>
         <Column style="width: 140px;">
           <template #body="{ data }">
-            <Button label="Открыть" text @click="$router.push(`/notes/${data.uuid}`)" />
+            <Button :label="$t('common.open')" text @click="$router.push(`/notes/${data.uuid}`)" />
           </template>
         </Column>
         <template #loading>
@@ -167,21 +169,21 @@ onMounted(() => {
           </div>
         </template>
         <template #empty>
-          Заметок не найдено
+          {{ $t('notes.noNotesFound') }}
         </template>
       </DataTable>
     </div>
 
-    <Dialog v-model:visible="dialog" header="Новый блог" modal style="max-width: 420px;">
+    <Dialog v-model:visible="dialog" :header="$t('blogs.newBlogDialog')" modal style="max-width: 420px;">
       <div class="form">
         <label class="field">
-          <span>Название</span>
+          <span>{{ $t('common.name') }}</span>
           <InputText v-model="form.title" class="w-full" />
         </label>
       </div>
       <template #footer>
-        <Button label="Отмена" text @click="dialog = false" />
-        <Button label="Создать" @click="createBlog" />
+        <Button :label="$t('common.cancel')" text @click="dialog = false" />
+        <Button :label="$t('common.create')" @click="createBlog" />
       </template>
     </Dialog>
   </div>

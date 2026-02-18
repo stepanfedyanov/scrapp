@@ -1,0 +1,109 @@
+{
+  "nav": {
+    "blogs": "Blogs",
+    "integrations": "Integrations",
+    "logout": "Log out"
+  },
+  "auth": {
+    "login": {
+      "title": "Sign In",
+      "username": "Username",
+      "password": "Password",
+      "submit": "Sign In",
+      "createAccount": "Create account",
+      "error": "Invalid username or password"
+    },
+    "register": {
+      "title": "Register",
+      "username": "Username",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Create",
+      "haveAccount": "Already have an account",
+      "error": "Failed to create account"
+    }
+  },
+  "common": {
+    "cancel": "Cancel",
+    "create": "Create",
+    "delete": "Delete",
+    "open": "Open",
+    "save": "Save",
+    "add": "Add",
+    "close": "Close",
+    "name": "Name",
+    "title": "Title",
+    "status": "Status",
+    "updated": "Updated",
+    "blog": "Blog",
+    "untitled": "Untitled",
+    "provider": "Provider"
+  },
+  "status": {
+    "all": "All statuses",
+    "draft": "Draft",
+    "scheduled": "Scheduled",
+    "published": "Published",
+    "archived": "Archived"
+  },
+  "blogs": {
+    "title": "Blogs",
+    "createBlog": "Create blog",
+    "noBlogsYet": "No blogs yet",
+    "defaultTitle": "New blog",
+    "updatedAt": "Updated: {date}",
+    "newBlogDialog": "New blog",
+    "allBlogs": "All blogs",
+    "notes": "Notes"
+  },
+  "notes": {
+    "title": "Notes",
+    "newNote": "New note",
+    "defaultTitle": "New note",
+    "noNotesFound": "No notes found",
+    "allStatuses": "All statuses",
+    "all": "All"
+  },
+  "integrations": {
+    "title": "Integrations",
+    "add": "Add",
+    "noIntegrationsYet": "No integrations yet",
+    "settingsNotActive": "Settings are not yet active. Will be used for auto-publishing.",
+    "newIntegrationDialog": "New integration"
+  },
+  "noteEditor": {
+    "title": "Editor",
+    "saving": "Saving\u2026",
+    "saved": "Saved",
+    "noteTitlePlaceholder": "Note title",
+    "integrations": "Integrations",
+    "schedule": "Schedule",
+    "publish": "Publish",
+    "delete": "Delete",
+    "scheduleDialog": "Schedule publication",
+    "integrationsDialog": "Integrations",
+    "integrationsNotActive": "Integrations are not yet active. Settings will be used for future auto-publishing.",
+    "integrationsStatus": "Status",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "emptyHint": "Click + above to add your first block",
+    "saveError": "Failed to save",
+    "notFound": "Note not found"
+  },
+  "blocks": {
+    "header": "Header",
+    "text": "Text block",
+    "deleteBlock": "Delete block",
+    "headingPlaceholder": "Heading {level}\u2026",
+    "toolbar": {
+      "bold": "Bold",
+      "italic": "Italic",
+      "code": "Code",
+      "quote": "Quote",
+      "bulletList": "Bullet list",
+      "orderedList": "Ordered list",
+      "link": "Link"
+    },
+    "writeSomething": "Write something\u2026"
+  }
+}
