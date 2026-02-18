@@ -1,6 +1,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '~/src/entities/user'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -9,6 +10,7 @@ import Password from 'primevue/password'
 import Message from 'primevue/message'
 
 const router = useRouter()
+const { t } = useI18n()
 const auth = useAuthStore()
 const form = reactive({
   username: '',
@@ -24,7 +26,7 @@ const submit = async () => {
     await auth.login(form)
     router.push('/blogs')
   } catch (err) {
-    error.value = 'Неверный логин или пароль'
+    error.value = t('auth.login.error')
   } finally {
     loading.value = false
   }
@@ -34,15 +36,15 @@ const submit = async () => {
 <template>
   <div class="page">
     <Card class="card" style="max-width: 420px; margin: 40px auto;">
-      <template #title>Вход</template>
+      <template #title>{{ $t('auth.login.title') }}</template>
       <template #content>
         <form @submit.prevent="submit" class="form">
           <label class="field">
-            <span>Логин</span>
+            <span>{{ $t('auth.login.username') }}</span>
             <InputText v-model="form.username" class="w-full" />
           </label>
           <label class="field">
-            <span>Пароль</span>
+            <span>{{ $t('auth.login.password') }}</span>
             <Password
               v-model="form.password"
               toggleMask
@@ -54,10 +56,10 @@ const submit = async () => {
           <Message v-if="error" severity="error" :closable="false" style="margin-bottom: 12px;">
             {{ error }}
           </Message>
-          <Button label="Войти" type="submit" :loading="loading" class="w-full" />
+          <Button :label="$t('auth.login.submit')" type="submit" :loading="loading" class="w-full" />
         </form>
         <div style="margin-top: 16px; text-align: center;">
-          <Button label="Создать аккаунт" text @click="$router.push('/register')" />
+          <Button :label="$t('auth.login.createAccount')" text @click="$router.push('/register')" />
         </div>
       </template>
     </Card>

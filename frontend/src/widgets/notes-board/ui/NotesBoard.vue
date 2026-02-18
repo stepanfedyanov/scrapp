@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useNotesStore } from '~/src/entities/note'
 import Button from 'primevue/button'
 import DataTable from 'primevue/datatable'
@@ -11,24 +12,25 @@ import ProgressSpinner from 'primevue/progressspinner'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const store = useNotesStore()
 const blogUuid = ref(route.params.id)
 const statusFilter = ref('all')
 
-const statusLabels = {
-  draft: 'Заметка',
-  scheduled: 'Запланировано',
-  published: 'Опубликовано',
-  archived: 'В архиве'
-}
+const statusLabels = computed(() => ({
+  draft: t('status.draft'),
+  scheduled: t('status.scheduled'),
+  published: t('status.published'),
+  archived: t('status.archived'),
+}))
 
-const statusOptions = [
-  { label: 'Все', value: 'all' },
-  { label: 'Заметка', value: 'draft' },
-  { label: 'Запланировано', value: 'scheduled' },
-  { label: 'Опубликовано', value: 'published' },
-  { label: 'В архиве', value: 'archived' }
-]
+const statusOptions = computed(() => [
+  { label: t('notes.all'), value: 'all' },
+  { label: t('status.draft'), value: 'draft' },
+  { label: t('status.scheduled'), value: 'scheduled' },
+  { label: t('status.published'), value: 'published' },
+  { label: t('status.archived'), value: 'archived' },
+])
 
 const filteredNotes = computed(() => {
   if (statusFilter.value === 'all') return store.notes
@@ -37,7 +39,7 @@ const filteredNotes = computed(() => {
 
 const createNote = async () => {
   const note = await store.createNote({
-    title: 'Новая заметка',
+    title: t('notes.defaultTitle'),
     body: '',
     blog_uuid: blogUuid.value
   })
@@ -53,19 +55,19 @@ onMounted(() => {
   <div class="page">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2>Заметки</h2>
-        <Button label="Новая заметка" icon="pi pi-plus" @click="createNote" />
+        <h2>{{ $t('notes.title') }}</h2>
+        <Button :label="$t('notes.newNote')" icon="pi pi-plus" @click="createNote" />
       </div>
       <div style="display: flex; gap: 12px; margin-bottom: 16px;">
-        <Dropdown v-model="statusFilter" :options="statusOptions" optionLabel="label" optionValue="value" placeholder="Статус" style="width: 220px;" />
+        <Dropdown v-model="statusFilter" :options="statusOptions" optionLabel="label" optionValue="value" :placeholder="$t('common.status')" style="width: 220px;" />
       </div>
       <DataTable
         :value="filteredNotes"
         :loading="store.loading"
         responsiveLayout="scroll"
       >
-        <Column field="title" header="Заголовок" />
-        <Column header="Статус" style="width: 180px;">
+        <Column field="title" :header="$t('common.title')" />
+        <Column :header="$t('common.status')" style="width: 180px;">
           <template #body="{ data }">
             <Tag v-if="data.status === 'draft'" severity="info">{{ statusLabels.draft }}</Tag>
             <Tag v-else-if="data.status === 'scheduled'" severity="warning">{{ statusLabels.scheduled }}</Tag>
@@ -73,14 +75,14 @@ onMounted(() => {
             <Tag v-else severity="secondary">{{ statusLabels.archived }}</Tag>
           </template>
         </Column>
-        <Column header="Обновлено" style="width: 220px;">
+        <Column :header="$t('common.updated')" style="width: 220px;">
           <template #body="{ data }">
             {{ new Date(data.updated_at).toLocaleString() }}
           </template>
         </Column>
         <Column style="width: 140px;">
           <template #body="{ data }">
-            <Button label="Открыть" text @click="$router.push(`/notes/${data.uuid}`)" />
+            <Button :label="$t('common.open')" text @click="$router.push(`/notes/${data.uuid}`)" />
           </template>
         </Column>
         <template #loading>
@@ -89,7 +91,7 @@ onMounted(() => {
           </div>
         </template>
         <template #empty>
-          Заметок не найдено
+          {{ $t('notes.noNotesFound') }}
         </template>
       </DataTable>
     </div>

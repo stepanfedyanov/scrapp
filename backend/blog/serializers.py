@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration
+from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent
 
 
 User = get_user_model()
@@ -117,6 +117,34 @@ class BlogSerializer(serializers.ModelSerializer):
         read_only_fields = ('created_at', 'updated_at')
 
 
+class NoteHeaderSerializer(serializers.ModelSerializer):
+    note_uuid = serializers.SlugRelatedField(
+        source='note',
+        slug_field='uuid',
+        queryset=Note.objects.alive(),
+        write_only=True,
+    )
+
+    class Meta:
+        model = NoteHeader
+        fields = ('id', 'note_uuid', 'text', 'level', 'order', 'created_at', 'updated_at')
+        read_only_fields = ('created_at', 'updated_at')
+
+
+class NoteTextContentSerializer(serializers.ModelSerializer):
+    note_uuid = serializers.SlugRelatedField(
+        source='note',
+        slug_field='uuid',
+        queryset=Note.objects.alive(),
+        write_only=True,
+    )
+
+    class Meta:
+        model = NoteTextContent
+        fields = ('id', 'note_uuid', 'html', 'order', 'created_at', 'updated_at')
+        read_only_fields = ('created_at', 'updated_at')
+
+
 class NoteSerializer(serializers.ModelSerializer):
     blog = BlogSerializer(read_only=True)
     blog_uuid = serializers.SlugRelatedField(
@@ -126,6 +154,8 @@ class NoteSerializer(serializers.ModelSerializer):
         write_only=True,
     )
     note_integrations = NoteIntegrationSerializer(many=True, read_only=True)
+    headers = NoteHeaderSerializer(many=True, read_only=True)
+    text_contents = NoteTextContentSerializer(many=True, read_only=True)
 
     class Meta:
         model = Note
@@ -141,6 +171,8 @@ class NoteSerializer(serializers.ModelSerializer):
             'published_at',
             'archived_at',
             'note_integrations',
+            'headers',
+            'text_contents',
             'created_at',
             'updated_at',
         )

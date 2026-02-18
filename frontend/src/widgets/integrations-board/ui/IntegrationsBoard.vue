@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { api } from '~/src/shared/api'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -10,6 +11,7 @@ import Tag from 'primevue/tag'
 import ProgressSpinner from 'primevue/progressspinner'
 
 const integrations = ref([])
+const { t } = useI18n()
 const loading = ref(false)
 const dialog = ref(false)
 const form = reactive({
@@ -48,8 +50,8 @@ onMounted(fetchIntegrations)
   <div class="page">
     <div class="card">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h2>Интеграции</h2>
-        <Button label="Добавить" icon="pi pi-plus" @click="dialog = true" />
+        <h2>{{ $t('integrations.title') }}</h2>
+        <Button :label="$t('integrations.add')" icon="pi pi-plus" @click="dialog = true" />
       </div>
 
       <div v-if="loading" style="display: flex; justify-content: center; padding: 24px;">
@@ -66,31 +68,31 @@ onMounted(fetchIntegrations)
           </template>
           <template #content>
             <div style="color: #6b7280;">
-              Настройки пока не активны. Будут использованы для автопубликации.
+              {{ $t('integrations.settingsNotActive') }}
             </div>
           </template>
         </Card>
       </div>
 
       <div v-if="!loading && integrations.length === 0" style="text-align: center; color: #6b7280; padding: 24px;">
-        Интеграций пока нет
+        {{ $t('integrations.noIntegrationsYet') }}
       </div>
     </div>
 
-    <Dialog v-model:visible="dialog" header="Новая интеграция" modal style="max-width: 420px;">
+    <Dialog v-model:visible="dialog" :header="$t('integrations.newIntegrationDialog')" modal style="max-width: 420px;">
       <div class="form">
         <label class="field">
-          <span>Название</span>
+          <span>{{ $t('common.name') }}</span>
           <InputText v-model="form.name" class="w-full" />
         </label>
         <label class="field">
-          <span>Провайдер</span>
+          <span>{{ $t('common.provider') }}</span>
           <Dropdown v-model="form.provider" :options="providerOptions" optionLabel="label" optionValue="value" class="w-full" />
         </label>
       </div>
       <template #footer>
-        <Button label="Отмена" text @click="dialog = false" />
-        <Button label="Создать" @click="createIntegration" />
+        <Button :label="$t('common.cancel')" text @click="dialog = false" />
+        <Button :label="$t('common.create')" @click="createIntegration" />
       </template>
     </Dialog>
   </div>

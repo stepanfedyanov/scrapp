@@ -9,7 +9,9 @@ from .views import (
     BlogIntegrationViewSet,
     BlogViewSet,
     IntegrationViewSet,
+    NoteHeaderViewSet,
     NoteIntegrationViewSet,
+    NoteTextContentViewSet,
     NoteViewSet,
     RegisterViewSet,
 )
@@ -28,6 +30,12 @@ router.register(
     'note-integrations',
     NoteIntegrationViewSet,
     basename='note-integrations',
+)
+router.register('note-headers', NoteHeaderViewSet, basename='note-headers')
+router.register(
+    'note-text-contents',
+    NoteTextContentViewSet,
+    basename='note-text-contents',
 )
 
 urlpatterns = [

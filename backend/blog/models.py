@@ -152,3 +152,42 @@ class NoteIntegration(SoftDeleteModel):
 
     class Meta:
         unique_together = ('note', 'integration')
+
+
+class NoteHeader(models.Model):
+    LEVEL_CHOICES = [(2, 'H2'), (3, 'H3')]
+
+    note = models.ForeignKey(
+        Note,
+        on_delete=models.CASCADE,
+        related_name='headers',
+    )
+    text = models.CharField(max_length=500, blank=True)
+    level = models.PositiveSmallIntegerField(choices=LEVEL_CHOICES, default=2)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self) -> str:
+        return f"H{self.level}: {self.text[:60]}"
+
+
+class NoteTextContent(models.Model):
+    note = models.ForeignKey(
+        Note,
+        on_delete=models.CASCADE,
+        related_name='text_contents',
+    )
+    html = models.TextField(blank=True)
+    order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self) -> str:
+        return f"TextContent(note={self.note_id}, order={self.order})"

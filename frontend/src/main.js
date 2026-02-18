@@ -7,6 +7,7 @@ import 'primeicons/primeicons.css'
 import '~/src/app/styles/index.scss'
 import App from '~/src/app/App.vue'
 import router from '~/src/app/router'
+import i18n from '~/src/shared/i18n'
 
 const AquaPreset = definePreset(Aura, {
 	semantic: {
@@ -29,6 +30,7 @@ const AquaPreset = definePreset(Aura, {
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+app.use(i18n)
 app.use(PrimeVue, {
 	theme: {
 		preset: AquaPreset
