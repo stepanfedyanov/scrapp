@@ -9,4 +9,9 @@ class IsOwner(BasePermission):
         blog = getattr(obj, 'blog', None)
         if blog is not None:
             return getattr(blog, 'owner', None) == request.user
+        note = getattr(obj, 'note', None)
+        if note is not None:
+            blog = getattr(note, 'blog', None)
+            if blog is not None:
+                return getattr(blog, 'owner', None) == request.user
         return False

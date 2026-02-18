@@ -157,6 +157,13 @@ class NoteIntegration(SoftDeleteModel):
 class NoteHeader(models.Model):
     LEVEL_CHOICES = [(2, 'H2'), (3, 'H3')]
 
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     note = models.ForeignKey(
         Note,
         on_delete=models.CASCADE,
@@ -176,6 +183,13 @@ class NoteHeader(models.Model):
 
 
 class NoteTextContent(models.Model):
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        editable=False,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     note = models.ForeignKey(
         Note,
         on_delete=models.CASCADE,
