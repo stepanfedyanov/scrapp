@@ -76,7 +76,7 @@ async function syncBlock(block) {
         await api.patch(`/note-headers/${block.serverId}/`, payload)
       } else {
         const { data } = await api.post('/note-headers/', payload)
-        block.serverId = data.id
+        block.serverId = data.uuid
         persistLocal()
       }
     } else {
@@ -85,7 +85,7 @@ async function syncBlock(block) {
         await api.patch(`/note-text-contents/${block.serverId}/`, payload)
       } else {
         const { data } = await api.post('/note-text-contents/', payload)
-        block.serverId = data.id
+        block.serverId = data.uuid
         persistLocal()
       }
     }
@@ -159,7 +159,7 @@ function scheduleTitleSave() {
 function buildBlocksFromServer(data) {
   const headers = (data.headers ?? []).map(h => ({
     localId: uid(),
-    serverId: h.id,
+    serverId: h.uuid,
     type: 'header',
     text: h.text,
     level: h.level,
@@ -167,7 +167,7 @@ function buildBlocksFromServer(data) {
   }))
   const texts = (data.text_contents ?? []).map(t => ({
     localId: uid(),
-    serverId: t.id,
+    serverId: t.uuid,
     type: 'text',
     html: t.html,
     order: t.order,
@@ -189,12 +189,10 @@ async function loadNote() {
   } else if (serverBlocks.length > 0) {
     blocks.value = serverBlocks
   } else {
-    // Seed default blocks for a brand new note
+    // Seed default blocks for a brand new note (sync only on first edit)
     const header = { localId: uid(), serverId: null, type: 'header', text: '', level: 2, order: 0 }
     const text   = { localId: uid(), serverId: null, type: 'text',   html: '',  order: 1 }
     blocks.value = [header, text]
-    syncBlock(header)
-    syncBlock(text)
   }
 }
 

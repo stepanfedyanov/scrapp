@@ -127,8 +127,8 @@ class NoteHeaderSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NoteHeader
-        fields = ('id', 'note_uuid', 'text', 'level', 'order', 'created_at', 'updated_at')
-        read_only_fields = ('created_at', 'updated_at')
+        fields = ('uuid', 'note_uuid', 'text', 'level', 'order', 'created_at', 'updated_at')
+        read_only_fields = ('uuid', 'created_at', 'updated_at')
 
 
 class NoteTextContentSerializer(serializers.ModelSerializer):
@@ -141,8 +141,8 @@ class NoteTextContentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NoteTextContent
-        fields = ('id', 'note_uuid', 'html', 'order', 'created_at', 'updated_at')
-        read_only_fields = ('created_at', 'updated_at')
+        fields = ('uuid', 'note_uuid', 'html', 'order', 'created_at', 'updated_at')
+        read_only_fields = ('uuid', 'created_at', 'updated_at')
 
 
 class NoteSerializer(serializers.ModelSerializer):

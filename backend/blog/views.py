@@ -166,11 +166,12 @@ class NoteHeaderViewSet(
 ):
     serializer_class = NoteHeaderSerializer
     permission_classes = [IsOwner]
+    lookup_field = 'uuid'
 
     def get_queryset(self):
         queryset = NoteHeader.objects.filter(
             note__blog__owner=self.request.user
-        ).select_related('note')
+        ).select_related('note__blog')
         note_uuid = self.request.query_params.get('note_uuid')
         if note_uuid:
             queryset = queryset.filter(note__uuid=note_uuid)
@@ -192,11 +193,12 @@ class NoteTextContentViewSet(
 ):
     serializer_class = NoteTextContentSerializer
     permission_classes = [IsOwner]
+    lookup_field = 'uuid'
 
     def get_queryset(self):
         queryset = NoteTextContent.objects.filter(
             note__blog__owner=self.request.user
-        ).select_related('note')
+        ).select_related('note__blog')
         note_uuid = self.request.query_params.get('note_uuid')
         if note_uuid:
             queryset = queryset.filter(note__uuid=note_uuid)
