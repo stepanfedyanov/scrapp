@@ -1,5 +1,6 @@
 <script setup>
 import { AppHeader } from '~/src/widgets/app-header'
+import Toast from 'primevue/toast'
 </script>
 
 <template>
@@ -8,6 +9,7 @@ import { AppHeader } from '~/src/widgets/app-header'
     <main class="app-main">
       <router-view />
     </main>
+    <Toast position="bottom-right" />
   </div>
 </template>
 

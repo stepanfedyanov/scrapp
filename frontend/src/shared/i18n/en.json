@@ -88,7 +88,14 @@
     "disabled": "Disabled",
     "emptyHint": "Click + above to add your first block",
     "saveError": "Failed to save",
-    "notFound": "Note not found"
+    "notFound": "Note not found",
+    "syncWarningTitle": "Local Changes Not Saved",
+    "syncWarningDetail": "Your local data differs from the server. Some changes may not have been saved.",
+    "retrySave": "Save Now",
+    "saveErrorTitle": "Save Failed",
+    "saveErrorDetail": "Failed to save changes to the server. Please try again.",
+    "blockSyncError": "A block failed to sync to the server.",
+    "savedSuccess": "Note saved successfully"
   },
   "blocks": {
     "header": "Header",
