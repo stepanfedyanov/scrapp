@@ -160,8 +160,7 @@ class NoteHeader(models.Model):
     uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=False,
-        null=True,
-        blank=True,
+        unique=True,
         db_index=True,
     )
     note = models.ForeignKey(
@@ -186,8 +185,7 @@ class NoteTextContent(models.Model):
     uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=False,
-        null=True,
-        blank=True,
+        unique=True,
         db_index=True,
     )
     note = models.ForeignKey(

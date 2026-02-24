@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { useToast } from 'primevue/usetoast'
 import { api } from '~/src/shared/api'
 import { useNotesStore } from '~/src/entities/note'
 import { NoteBlockText, NoteBlockHeader, BlockAdder } from '~/src/features/note-blocks'
@@ -10,12 +11,14 @@ import Card from 'primevue/card'
 import Dialog from 'primevue/dialog'
 import InputText from 'primevue/inputtext'
 import Calendar from 'primevue/calendar'
+import Toast from 'primevue/toast'
 import Message from 'primevue/message'
 import Tag from 'primevue/tag'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const toast = useToast()
 const store = useNotesStore()
 const noteUuid = route.params.id
 
@@ -34,7 +37,6 @@ const scheduleDialog = ref(false)
 const integrationsDialog = ref(false)
 const scheduleDate = ref(null)
 const saving = ref(false)
-const error = ref('')
 const lastSaved = ref(null)
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
@@ -91,6 +93,12 @@ async function syncBlock(block) {
     }
   } catch (e) {
     console.error('Block sync error', e)
+    toast.add({
+      severity: 'error',
+      summary: t('noteEditor.saveErrorTitle'),
+      detail: t('noteEditor.blockSyncError'),
+      life: 6000,
+    })
   }
 }
 
@@ -148,11 +156,129 @@ function scheduleTitleSave() {
       })
       lastSaved.value = new Date()
     } catch {
-      error.value = t('noteEditor.saveError')
+      toast.add({
+        severity: 'error',
+        summary: t('noteEditor.saveErrorTitle'),
+        detail: t('noteEditor.saveErrorDetail'),
+        life: 6000,
+      })
     } finally {
       saving.value = false
     }
   }, 600)
+}
+
+// ─── Save all (retry) ─────────────────────────────────────────────────────────
+async function saveAll() {
+  saving.value = true
+  toast.removeGroup('note-editor')
+  try {
+    // Fetch current server state to find orphaned blocks (deleted locally but still on server)
+    const { data: serverData } = await api.get(`/notes/${noteUuid}/`)
+    const localServerIds = new Set(blocks.value.map(b => b.serverId).filter(Boolean))
+
+    const orphanedHeaders = (serverData.headers ?? []).filter(h => !localServerIds.has(h.uuid))
+    const orphanedTexts = (serverData.text_contents ?? []).filter(t => !localServerIds.has(t.uuid))
+
+    await Promise.all([
+      ...orphanedHeaders.map(h => api.delete(`/note-headers/${h.uuid}/`)),
+      ...orphanedTexts.map(t => api.delete(`/note-text-contents/${t.uuid}/`)),
+    ])
+
+    await store.updateNote(noteUuid, {
+      title: note.title,
+      status: note.status,
+      scheduled_at: note.scheduled_at,
+    })
+    await Promise.all(blocks.value.map(block => syncBlock(block)))
+    persistLocal()
+    lastSaved.value = new Date()
+    toast.add({
+      severity: 'success',
+      summary: t('noteEditor.savedSuccess'),
+      life: 3000,
+    })
+  } catch {
+    toast.add({
+      severity: 'error',
+      group: 'note-editor',
+      summary: t('noteEditor.saveErrorTitle'),
+      detail: t('noteEditor.saveErrorDetail'),
+      sticky: true,
+      retryable: true,
+    })
+  } finally {
+    saving.value = false
+  }
+}
+
+// ─── Sync check ───────────────────────────────────────────────────────────────
+function checkLocalVsServer(serverData) {
+  const localMetaRaw = localStorage.getItem(metaKey.value)
+  const localBlocksRaw = localStorage.getItem(blocksKey.value)
+  if (!localMetaRaw && !localBlocksRaw) return
+
+  let mismatch = false
+
+  if (localMetaRaw) {
+    const localMeta = JSON.parse(localMetaRaw)
+    if (localMeta.title !== serverData.title || localMeta.status !== serverData.status) {
+      mismatch = true
+    }
+  }
+
+  if (localBlocksRaw) {
+    const localBlocks = JSON.parse(localBlocksRaw)
+
+    // Any block without a serverId has never been persisted to the backend
+    if (localBlocks.some(b => !b.serverId)) {
+      mismatch = true
+    }
+
+    // Build a lookup map of server blocks by UUID for O(1) access
+    const serverHeaderMap = new Map((serverData.headers ?? []).map(h => [h.uuid, h]))
+    const serverTextMap = new Map((serverData.text_contents ?? []).map(t => [t.uuid, t]))
+
+    // Check that each local block exists on server and has matching content
+    for (const b of localBlocks) {
+      if (!b.serverId) continue
+      if (b.type === 'header') {
+        const srv = serverHeaderMap.get(b.serverId)
+        if (!srv || srv.text !== b.text || srv.level !== b.level || srv.order !== b.order) {
+          mismatch = true
+          break
+        }
+      } else {
+        const srv = serverTextMap.get(b.serverId)
+        if (!srv || srv.html !== b.html || srv.order !== b.order) {
+          mismatch = true
+          break
+        }
+      }
+    }
+
+    // Orphaned server blocks: server has more blocks than local references (delete missed)
+    const localServerIds = new Set(localBlocks.map(b => b.serverId).filter(Boolean))
+    const serverBlockCount = (serverData.headers ?? []).length + (serverData.text_contents ?? []).length
+    const referencedServerCount = [...localServerIds].filter(id =>
+      (serverData.headers ?? []).some(h => h.uuid === id) ||
+      (serverData.text_contents ?? []).some(t => t.uuid === id)
+    ).length
+    if (serverBlockCount !== referencedServerCount) {
+      mismatch = true
+    }
+  }
+
+  if (mismatch) {
+    toast.add({
+      severity: 'warn',
+      group: 'note-editor',
+      summary: t('noteEditor.syncWarningTitle'),
+      detail: t('noteEditor.syncWarningDetail'),
+      sticky: true,
+      retryable: true,
+    })
+  }
 }
 
 // ─── Load ─────────────────────────────────────────────────────────────────────
@@ -194,6 +320,8 @@ async function loadNote() {
     const text   = { localId: uid(), serverId: null, type: 'text',   html: '',  order: 1 }
     blocks.value = [header, text]
   }
+
+  return data
 }
 
 // ─── Schedule / publish / delete ─────────────────────────────────────────────
@@ -225,9 +353,14 @@ watch(() => note.title, scheduleTitleSave)
 
 onMounted(async () => {
   try {
-    await loadNote()
+    const serverData = await loadNote()
+    checkLocalVsServer(serverData)
   } catch {
-    error.value = t('noteEditor.notFound')
+    toast.add({
+      severity: 'error',
+      summary: t('noteEditor.notFound'),
+      life: 8000,
+    })
   }
 })
 </script>
@@ -254,10 +387,6 @@ onMounted(async () => {
       </template>
 
       <template #content>
-        <Message v-if="error" severity="error" :closable="false" class="error-msg">
-          {{ error }}
-        </Message>
-
         <!-- Note title -->
         <div class="field">
           <InputText v-model="note.title" :placeholder="$t('noteEditor.noteTitlePlaceholder')" class="title-input" />
@@ -304,6 +433,26 @@ onMounted(async () => {
         <Button :label="$t('common.save')" @click="applySchedule" />
       </template>
     </Dialog>
+
+    <!-- Sync-error toast with retry button -->
+    <Toast group="note-editor" position="bottom-right">
+      <template #message="{ message }">
+        <div class="toast-sync">
+          <i :class="`pi pi-${message.severity === 'warn' ? 'exclamation-triangle' : 'times-circle'}`" class="toast-sync-icon" />
+          <div class="toast-sync-body">
+            <div class="toast-sync-summary">{{ message.summary }}</div>
+            <div class="toast-sync-detail">{{ message.detail }}</div>
+          </div>
+          <Button
+            v-if="message.retryable"
+            :label="$t('noteEditor.retrySave')"
+            size="small"
+            severity="contrast"
+            @click="saveAll"
+          />
+        </div>
+      </template>
+    </Toast>
 
     <!-- Integrations dialog -->
     <Dialog v-model:visible="integrationsDialog" :header="$t('noteEditor.integrationsDialog')" modal style="max-width: 720px;">
@@ -370,10 +519,6 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.error-msg {
-  margin: 16px 0;
-}
-
 .field {
   margin-bottom: 20px;
 }
@@ -411,5 +556,35 @@ onMounted(async () => {
 
 .w-full {
   width: 100%;
+}
+
+.toast-sync {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 4px 2px;
+
+  .toast-sync-icon {
+    font-size: 18px;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .toast-sync-body {
+    flex: 1;
+    min-width: 0;
+
+    .toast-sync-summary {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 4px;
+    }
+
+    .toast-sync-detail {
+      font-size: 13px;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+  }
 }
 </style>
