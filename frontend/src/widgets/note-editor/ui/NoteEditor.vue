@@ -38,6 +38,7 @@ const integrationsDialog = ref(false)
 const scheduleDate = ref(null)
 const saving = ref(false)
 const lastSaved = ref(null)
+const cachedServerData = ref(null)
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
 const metaKey = computed(() => `note-draft-${noteUuid}`)
@@ -49,8 +50,14 @@ function persistLocal() {
     title: note.title,
     status: note.status,
     scheduled_at: note.scheduled_at,
+    localUpdatedAt: new Date().toISOString(),
   }))
   localStorage.setItem(blocksKey.value, JSON.stringify(blocks.value))
+}
+
+function clearLocal() {
+  localStorage.removeItem(metaKey.value)
+  localStorage.removeItem(blocksKey.value)
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -174,11 +181,11 @@ async function saveAll() {
   toast.removeGroup('note-editor')
   try {
     // Fetch current server state to find orphaned blocks (deleted locally but still on server)
-    const { data: serverData } = await api.get(`/notes/${noteUuid}/`)
+    const { data: freshServerData } = await api.get(`/notes/${noteUuid}/`)
     const localServerIds = new Set(blocks.value.map(b => b.serverId).filter(Boolean))
 
-    const orphanedHeaders = (serverData.headers ?? []).filter(h => !localServerIds.has(h.uuid))
-    const orphanedTexts = (serverData.text_contents ?? []).filter(t => !localServerIds.has(t.uuid))
+    const orphanedHeaders = (freshServerData.headers ?? []).filter(h => !localServerIds.has(h.uuid))
+    const orphanedTexts = (freshServerData.text_contents ?? []).filter(t => !localServerIds.has(t.uuid))
 
     await Promise.all([
       ...orphanedHeaders.map(h => api.delete(`/note-headers/${h.uuid}/`)),
@@ -191,7 +198,8 @@ async function saveAll() {
       scheduled_at: note.scheduled_at,
     })
     await Promise.all(blocks.value.map(block => syncBlock(block)))
-    persistLocal()
+    // Server is now authoritative — drop local draft entirely
+    clearLocal()
     lastSaved.value = new Date()
     toast.add({
       severity: 'success',
@@ -205,7 +213,7 @@ async function saveAll() {
       summary: t('noteEditor.saveErrorTitle'),
       detail: t('noteEditor.saveErrorDetail'),
       sticky: true,
-      retryable: true,
+      data: { retryable: true, discardable: false },
     })
   } finally {
     saving.value = false
@@ -218,16 +226,28 @@ function checkLocalVsServer(serverData) {
   const localBlocksRaw = localStorage.getItem(blocksKey.value)
   if (!localMetaRaw && !localBlocksRaw) return
 
+  const localMeta = localMetaRaw ? JSON.parse(localMetaRaw) : null
+  const localUpdatedAt = localMeta?.localUpdatedAt ? new Date(localMeta.localUpdatedAt) : null
+  const serverUpdatedAt = new Date(serverData.updated_at)
+
+  // Server is strictly newer → another device/browser already saved a later version.
+  // The current browser's local draft is stale — discard silently and keep server data.
+  if (localUpdatedAt && serverUpdatedAt > localUpdatedAt) {
+    clearLocal()
+    return
+  }
+
+  // Local is newer (or has no timestamp = old format) → run a content diff to decide
+  // whether there is actually anything unsaved or all debounced syncs succeeded.
   let mismatch = false
 
-  if (localMetaRaw) {
-    const localMeta = JSON.parse(localMetaRaw)
+  if (localMeta) {
     if (localMeta.title !== serverData.title || localMeta.status !== serverData.status) {
       mismatch = true
     }
   }
 
-  if (localBlocksRaw) {
+  if (localBlocksRaw && !mismatch) {
     const localBlocks = JSON.parse(localBlocksRaw)
 
     // Any block without a serverId has never been persisted to the backend
@@ -235,50 +255,76 @@ function checkLocalVsServer(serverData) {
       mismatch = true
     }
 
-    // Build a lookup map of server blocks by UUID for O(1) access
-    const serverHeaderMap = new Map((serverData.headers ?? []).map(h => [h.uuid, h]))
-    const serverTextMap = new Map((serverData.text_contents ?? []).map(t => [t.uuid, t]))
+    if (!mismatch) {
+      // Build a lookup map of server blocks by UUID for O(1) access
+      const serverHeaderMap = new Map((serverData.headers ?? []).map(h => [h.uuid, h]))
+      const serverTextMap = new Map((serverData.text_contents ?? []).map(t => [t.uuid, t]))
 
-    // Check that each local block exists on server and has matching content
-    for (const b of localBlocks) {
-      if (!b.serverId) continue
-      if (b.type === 'header') {
-        const srv = serverHeaderMap.get(b.serverId)
-        if (!srv || srv.text !== b.text || srv.level !== b.level || srv.order !== b.order) {
-          mismatch = true
-          break
-        }
-      } else {
-        const srv = serverTextMap.get(b.serverId)
-        if (!srv || srv.html !== b.html || srv.order !== b.order) {
-          mismatch = true
-          break
+      for (const b of localBlocks) {
+        if (!b.serverId) continue
+        if (b.type === 'header') {
+          const srv = serverHeaderMap.get(b.serverId)
+          if (!srv || srv.text !== b.text || srv.level !== b.level || srv.order !== b.order) {
+            mismatch = true; break
+          }
+        } else {
+          const srv = serverTextMap.get(b.serverId)
+          if (!srv || srv.html !== b.html || srv.order !== b.order) {
+            mismatch = true; break
+          }
         }
       }
-    }
 
-    // Orphaned server blocks: server has more blocks than local references (delete missed)
-    const localServerIds = new Set(localBlocks.map(b => b.serverId).filter(Boolean))
-    const serverBlockCount = (serverData.headers ?? []).length + (serverData.text_contents ?? []).length
-    const referencedServerCount = [...localServerIds].filter(id =>
-      (serverData.headers ?? []).some(h => h.uuid === id) ||
-      (serverData.text_contents ?? []).some(t => t.uuid === id)
-    ).length
-    if (serverBlockCount !== referencedServerCount) {
-      mismatch = true
+      if (!mismatch) {
+        // Orphaned server blocks (deleted locally but DELETE call failed)
+        const localServerIds = new Set(localBlocks.map(b => b.serverId).filter(Boolean))
+        const serverBlockCount = (serverData.headers ?? []).length + (serverData.text_contents ?? []).length
+        const referencedCount = [...localServerIds].filter(id =>
+          (serverData.headers ?? []).some(h => h.uuid === id) ||
+          (serverData.text_contents ?? []).some(t => t.uuid === id)
+        ).length
+        if (serverBlockCount !== referencedCount) mismatch = true
+      }
     }
   }
 
-  if (mismatch) {
-    toast.add({
-      severity: 'warn',
-      group: 'note-editor',
-      summary: t('noteEditor.syncWarningTitle'),
-      detail: t('noteEditor.syncWarningDetail'),
-      sticky: true,
-      retryable: true,
+  if (!mismatch) {
+    // All debounced saves completed successfully — local and server are in sync
+    clearLocal()
+    return
+  }
+
+  // Real unsaved local changes: override reactive state with local draft and warn user
+  if (localMeta) {
+    Object.assign(note, {
+      title: localMeta.title ?? note.title,
+      status: localMeta.status ?? note.status,
+      scheduled_at: localMeta.scheduled_at ?? note.scheduled_at,
     })
   }
+  if (localBlocksRaw) {
+    blocks.value = JSON.parse(localBlocksRaw)
+  }
+
+  toast.add({
+    severity: 'warn',
+    group: 'note-editor',
+    summary: t('noteEditor.syncWarningTitle'),
+    detail: t('noteEditor.syncWarningDetail'),
+    sticky: true,
+    data: { retryable: true, discardable: true },
+  })
+}
+
+// ─── Discard local draft ──────────────────────────────────────────────────────
+function discardLocal() {
+  clearLocal()
+  toast.removeGroup('note-editor')
+  // Restore server state from cache (no extra round-trip)
+  const data = cachedServerData.value
+  if (!data) return
+  Object.assign(note, { title: data.title, status: data.status, scheduled_at: data.scheduled_at })
+  blocks.value = buildBlocksFromServer(data)
 }
 
 // ─── Load ─────────────────────────────────────────────────────────────────────
@@ -303,19 +349,15 @@ function buildBlocksFromServer(data) {
 
 async function loadNote() {
   const { data } = await api.get(`/notes/${noteUuid}/`)
+  cachedServerData.value = data
+
+  // Apply server data as the baseline; checkLocalVsServer() will override if local is newer
   Object.assign(note, { title: data.title, status: data.status, scheduled_at: data.scheduled_at })
-
-  const localMeta = localStorage.getItem(metaKey.value)
-  if (localMeta) Object.assign(note, JSON.parse(localMeta))
-
-  const localBlocks = localStorage.getItem(blocksKey.value)
   const serverBlocks = buildBlocksFromServer(data)
-  if (localBlocks) {
-    blocks.value = JSON.parse(localBlocks)
-  } else if (serverBlocks.length > 0) {
+  if (serverBlocks.length > 0) {
     blocks.value = serverBlocks
   } else {
-    // Seed default blocks for a brand new note (sync only on first edit)
+    // Seed default blocks for a brand new note (synced only on first edit)
     const header = { localId: uid(), serverId: null, type: 'header', text: '', level: 2, order: 0 }
     const text   = { localId: uid(), serverId: null, type: 'text',   html: '',  order: 1 }
     blocks.value = [header, text]
@@ -344,8 +386,7 @@ const markPublished = () => {
 
 const deleteNote = async () => {
   await store.deleteNote(noteUuid)
-  localStorage.removeItem(metaKey.value)
-  localStorage.removeItem(blocksKey.value)
+  clearLocal()
   router.push('/blogs')
 }
 
@@ -434,7 +475,7 @@ onMounted(async () => {
       </template>
     </Dialog>
 
-    <!-- Sync-error toast with retry button -->
+    <!-- Sync-error toast with retry / discard buttons -->
     <Toast group="note-editor" position="bottom-right">
       <template #message="{ message }">
         <div class="toast-sync">
@@ -443,13 +484,23 @@ onMounted(async () => {
             <div class="toast-sync-summary">{{ message.summary }}</div>
             <div class="toast-sync-detail">{{ message.detail }}</div>
           </div>
-          <Button
-            v-if="message.retryable"
-            :label="$t('noteEditor.retrySave')"
-            size="small"
-            severity="contrast"
-            @click="saveAll"
-          />
+          <div class="toast-sync-actions">
+            <Button
+              v-if="message.data?.retryable"
+              :label="$t('noteEditor.retrySave')"
+              size="small"
+              severity="contrast"
+              @click="saveAll"
+            />
+            <Button
+              v-if="message.data?.discardable"
+              :label="$t('noteEditor.discardChanges')"
+              size="small"
+              severity="secondary"
+              text
+              @click="discardLocal"
+            />
+          </div>
         </div>
       </template>
     </Toast>
@@ -585,6 +636,13 @@ onMounted(async () => {
       color: #6b7280;
       line-height: 1.4;
     }
+  }
+
+  .toast-sync-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
   }
 }
 </style>
