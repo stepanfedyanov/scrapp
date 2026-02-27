@@ -226,6 +226,26 @@ function checkLocalVsServer(serverData) {
   const localBlocksRaw = localStorage.getItem(blocksKey.value)
   if (!localMetaRaw && !localBlocksRaw) return
 
+  // special-case: brand new note with only default empty blocks
+  if (
+    serverData.headers.length === 0 &&
+    serverData.text_contents.length === 0 &&
+    localBlocksRaw
+  ) {
+    try {
+      const lb = JSON.parse(localBlocksRaw)
+      if (
+        lb.length === 2 &&
+        lb[0].type === 'header' && !lb[0].serverId && lb[0].text === '' &&
+        lb[1].type === 'text' && !lb[1].serverId && lb[1].html === ''
+      ) {
+        // no actual edits yet; drop the draft so we don't warn the user
+        clearLocal()
+        return
+      }
+    } catch {}
+  }
+
   const localMeta = localMetaRaw ? JSON.parse(localMetaRaw) : null
   const localUpdatedAt = localMeta?.localUpdatedAt ? new Date(localMeta.localUpdatedAt) : null
   const serverUpdatedAt = new Date(serverData.updated_at)

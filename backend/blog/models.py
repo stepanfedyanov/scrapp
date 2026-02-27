@@ -96,7 +96,7 @@ class Note(SoftDeleteModel):
         on_delete=models.PROTECT,
         related_name='notes',
     )
-    title = models.CharField(max_length=200)
+    title = models.CharField(max_length=200, blank=True, default='')
     body = models.TextField(blank=True)
     status = models.CharField(
         max_length=20,

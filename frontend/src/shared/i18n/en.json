@@ -60,6 +60,7 @@
     "title": "Notes",
     "newNote": "New note",
     "defaultTitle": "New note",
+    "untitled": "(untitled note)",
     "noNotesFound": "No notes found",
     "allStatuses": "All statuses",
     "all": "All"
