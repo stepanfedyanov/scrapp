@@ -3,7 +3,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent
-
+from apps.integrations.models import IntegrationDefinition
 
 User = get_user_model()
 
@@ -29,15 +29,24 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
         return user
 
-
 class IntegrationSerializer(serializers.ModelSerializer):
+    definition = serializers.PrimaryKeyRelatedField(
+        queryset=IntegrationDefinition.objects.all(),
+        required=False,
+    )
+
     class Meta:
         model = Integration
         fields = (
             'id',
             'name',
+            'title',
             'provider',
+            'definition',
             'config',
+            'credentials',
+            'status',
+            'last_error',
             'created_at',
             'updated_at',
         )

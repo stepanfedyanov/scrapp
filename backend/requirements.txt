@@ -8,3 +8,4 @@ psycopg-binary==3.3.2
 PyJWT==2.11.0
 sqlparse==0.5.5
 gunicorn==23.0.0
+jsonschema==4.19.1
