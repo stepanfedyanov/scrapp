@@ -164,6 +164,46 @@ class BlogIntegration(SoftDeleteModel):
         unique_together = ('blog', 'integration')
 
 
+class BlogIntegrationDefault(models.Model):
+    """Default integrations for a blog.
+    
+    When a new Note is created in a blog, PublishTargets are automatically
+    created from these defaults. The inheritance happens at creation time only.
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    blog = models.ForeignKey(
+        Blog,
+        on_delete=models.PROTECT,
+        related_name='default_integrations',
+        db_index=True,
+    )
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.PROTECT,
+        related_name='blog_defaults',
+        db_index=True,
+    )
+    publish_settings = models.JSONField(default=dict, blank=True)
+    is_enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('blog', 'integration')
+        ordering = ['blog', 'created_at']
+        indexes = [
+            models.Index(fields=['blog']),
+            models.Index(fields=['integration']),
+        ]
+
+    def __str__(self):
+        return f"Default({self.blog_id}, {self.integration_id})"
+
+
 class NoteIntegration(SoftDeleteModel):
     note = models.ForeignKey(
         Note,

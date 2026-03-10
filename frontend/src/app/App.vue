@@ -1,6 +1,7 @@
 <script setup>
 import { AppHeader } from '~/src/widgets/app-header'
 import Toast from 'primevue/toast'
+import ConfirmDialog from 'primevue/confirmdialog'
 </script>
 
 <template>
@@ -10,6 +11,7 @@ import Toast from 'primevue/toast'
       <router-view />
     </main>
     <Toast position="bottom-right" />
+    <ConfirmDialog />
   </div>
 </template>
 

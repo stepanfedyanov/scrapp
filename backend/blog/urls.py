@@ -8,6 +8,7 @@ from rest_framework_simplejwt.views import (
 from .views import (
     BlogIntegrationViewSet,
     BlogViewSet,
+    BlogIntegrationDefaultViewSet,
     # Note: old IntegrationViewSet from blog will be replaced by new one imported below
     NoteHeaderViewSet,
     NoteIntegrationViewSet,
@@ -46,6 +47,11 @@ router.register(
     NoteTextContentViewSet,
     basename='note-text-contents',
 )
+router.register(
+    'blog-default-integrations',
+    BlogIntegrationDefaultViewSet,
+    basename='blog-default-integrations',
+)
 
 urlpatterns = [
     path(
@@ -56,3 +62,4 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('', include(router.urls)),
 ]
+

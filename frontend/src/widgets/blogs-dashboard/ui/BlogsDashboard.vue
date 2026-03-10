@@ -53,6 +53,10 @@ const openNotes = (blogUuid) => {
   router.push(`/blogs/${blogUuid}/notes`)
 }
 
+const openSettings = (blogUuid) => {
+  router.push(`/blogs/${blogUuid}/settings`)
+}
+
 const createBlog = async () => {
   const blog = await store.createBlog({ title: form.title || t('blogs.defaultTitle') })
   dialog.value = false
@@ -93,6 +97,7 @@ onMounted(() => {
             </div>
             <div class="blog-card-actions">
               <Button :label="$t('blogs.notes')" text @click="openNotes(blog.uuid)" />
+              <Button :label="$t('blogs.settings')" text icon="pi pi-cog" @click="openSettings(blog.uuid)" />
               <Button :label="$t('common.delete')" text severity="danger" @click="removeBlog(blog.uuid)" />
             </div>
           </template>

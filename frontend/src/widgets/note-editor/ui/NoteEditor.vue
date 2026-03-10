@@ -3,8 +3,10 @@ import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'primevue/usetoast'
+import { useConfirm } from 'primevue/useconfirm'
 import { api } from '~/src/shared/api'
 import { useNotesStore } from '~/src/entities/note'
+import { useIntegrationsStore } from '~/src/entities/integrations'
 import { NoteBlockText, NoteBlockHeader, BlockAdder } from '~/src/features/note-blocks'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -13,13 +15,19 @@ import InputText from 'primevue/inputtext'
 import Calendar from 'primevue/calendar'
 import Toast from 'primevue/toast'
 import Message from 'primevue/message'
-import Tag from 'primevue/tag'
+import DataTable from 'primevue/datatable'
+import Column from 'primevue/column'
+import Dropdown from 'primevue/dropdown'
+import InputSwitch from 'primevue/inputswitch'
+import DynamicSchemaForm from '~/src/shared/ui/forms/DynamicSchemaForm.vue'
 
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
+const confirm = useConfirm()
 const store = useNotesStore()
+const integrationsStore = useIntegrationsStore()
 const noteUuid = route.params.id
 
 // ─── Note meta ───────────────────────────────────────────────────────────────
@@ -35,10 +43,22 @@ const blocks = ref([])
 // ─── UI state ────────────────────────────────────────────────────────────────
 const scheduleDialog = ref(false)
 const integrationsDialog = ref(false)
+const addTargetDialog = ref(false)
+const connectIntegrationDialog = ref(false)
 const scheduleDate = ref(null)
 const saving = ref(false)
+const integrationsLoading = ref(false)
 const lastSaved = ref(null)
 const cachedServerData = ref(null)
+const selectedTargetOption = ref(null)
+const selectedLibraryDefinitionCode = ref(null)
+const newIntegrationTitle = ref('')
+const connectFormData = ref({})
+const newTargetForm = ref({
+  integration_id: null,
+  publish_settings: {},
+  is_enabled: true
+})
 
 // ─── Storage keys ────────────────────────────────────────────────────────────
 const metaKey = computed(() => `note-draft-${noteUuid}`)
@@ -146,6 +166,238 @@ function removeBlock(localId) {
 function onBlockChange(block) {
   persistLocal()
   scheduleBlockSync(block)
+}
+
+const noteTargets = computed(() => integrationsStore.publishTargets)
+
+const availableNoteIntegrations = computed(() => {
+  const usedIds = new Set(noteTargets.value.map(t => t.integration?.id).filter(Boolean))
+  return integrationsStore.integrations.filter(i => !usedIds.has(i.id))
+})
+
+const noteIntegrationPickerOptions = computed(() => {
+  const configured = availableNoteIntegrations.value.map(i => ({
+    label: i.title,
+    description: i.definition?.name || '',
+    kind: 'configured',
+    integration_id: i.id
+  }))
+
+  const library = integrationsStore.definitions.map(definition => ({
+    label: definition.name,
+    description: definition.category || '',
+    kind: 'library',
+    definition_code: definition.code,
+    definition_id: definition.id
+  }))
+
+  return [
+    { label: t('noteEditor.groupConfigured'), items: configured },
+    { label: t('noteEditor.groupLibrary'), items: library }
+  ].filter(group => group.items.length > 0)
+})
+
+const selectedTargetIntegrationDefinition = computed(() => {
+  if (!newTargetForm.value.integration_id) return null
+  const integration = integrationsStore.integrations.find(i => i.id === newTargetForm.value.integration_id)
+  return integration?.definition || null
+})
+
+const selectedTargetPublishSchema = computed(() => {
+  return selectedTargetIntegrationDefinition.value?.publish_schema || {}
+})
+
+const selectedLibraryDefinition = computed(() => {
+  if (!selectedLibraryDefinitionCode.value) return null
+  return integrationsStore.getDefinitionByCode(selectedLibraryDefinitionCode.value)
+})
+
+const selectedLibrarySchema = computed(() => {
+  return selectedLibraryDefinition.value?.config_schema || {}
+})
+
+const loadNoteIntegrations = async () => {
+  integrationsLoading.value = true
+  try {
+    await Promise.all([
+      integrationsStore.fetchPublishTargets({ content_type: 'note', object_id: noteUuid }),
+      integrationsStore.fetchIntegrations(),
+      integrationsStore.fetchDefinitions()
+    ])
+  } catch (error) {
+    console.error('Failed to load note integrations', error)
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('noteEditor.targetsLoadError'),
+      life: 3000,
+    })
+  } finally {
+    integrationsLoading.value = false
+  }
+}
+
+const openIntegrationsDialog = async () => {
+  integrationsDialog.value = true
+  await loadNoteIntegrations()
+}
+
+const openAddTargetDialog = () => {
+  selectedTargetOption.value = null
+  selectedLibraryDefinitionCode.value = null
+  newIntegrationTitle.value = ''
+  connectFormData.value = {}
+  newTargetForm.value = {
+    integration_id: null,
+    publish_settings: {},
+    is_enabled: true
+  }
+  addTargetDialog.value = true
+}
+
+const closeAddTargetDialog = () => {
+  addTargetDialog.value = false
+  selectedTargetOption.value = null
+  newTargetForm.value = {
+    integration_id: null,
+    publish_settings: {},
+    is_enabled: true
+  }
+}
+
+const openConnectIntegrationDialog = (definitionCode) => {
+  selectedLibraryDefinitionCode.value = definitionCode
+  const definition = integrationsStore.getDefinitionByCode(definitionCode)
+  newIntegrationTitle.value = definition?.name || ''
+  connectFormData.value = {}
+  connectIntegrationDialog.value = true
+}
+
+const closeConnectIntegrationDialog = () => {
+  connectIntegrationDialog.value = false
+  selectedLibraryDefinitionCode.value = null
+  newIntegrationTitle.value = ''
+  connectFormData.value = {}
+}
+
+const connectAndSelectForTarget = async () => {
+  if (!selectedLibraryDefinition.value) return
+
+  integrationsLoading.value = true
+  try {
+    const integration = await integrationsStore.createIntegration({
+      title: (newIntegrationTitle.value || selectedLibraryDefinition.value.name).trim(),
+      definition_id: selectedLibraryDefinition.value.id,
+      credentials: connectFormData.value
+    })
+
+    await integrationsStore.fetchIntegrations()
+    newTargetForm.value.integration_id = integration.id
+    selectedTargetOption.value = {
+      label: integration.title,
+      description: integration.definition?.name || '',
+      kind: 'configured',
+      integration_id: integration.id
+    }
+
+    toast.add({
+      severity: 'success',
+      summary: t('common.success'),
+      detail: t('noteEditor.connected'),
+      life: 3000,
+    })
+
+    closeConnectIntegrationDialog()
+  } catch (error) {
+    console.error('Failed to connect integration for note', error)
+    const detail = error.response?.data?.credentials?.[0] || t('noteEditor.connectError')
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail,
+      life: 3000,
+    })
+  } finally {
+    integrationsLoading.value = false
+  }
+}
+
+const addPublishTarget = async () => {
+  if (!newTargetForm.value.integration_id) return
+
+  integrationsLoading.value = true
+  try {
+    await integrationsStore.createPublishTarget({
+      content_type: 'note',
+      object_id: noteUuid,
+      integration_id: newTargetForm.value.integration_id,
+      publish_settings: newTargetForm.value.publish_settings,
+      is_enabled: newTargetForm.value.is_enabled
+    })
+    await integrationsStore.fetchPublishTargets({ content_type: 'note', object_id: noteUuid })
+    toast.add({
+      severity: 'success',
+      summary: t('common.success'),
+      detail: t('noteEditor.targetAdded'),
+      life: 3000,
+    })
+    closeAddTargetDialog()
+  } catch (error) {
+    console.error('Failed to add publish target', error)
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('noteEditor.targetAddError'),
+      life: 3000,
+    })
+  } finally {
+    integrationsLoading.value = false
+  }
+}
+
+const togglePublishTarget = async (target) => {
+  integrationsLoading.value = true
+  try {
+    await integrationsStore.updatePublishTarget(target.id, {
+      is_enabled: !target.is_enabled
+    })
+    await integrationsStore.fetchPublishTargets({ content_type: 'note', object_id: noteUuid })
+  } catch (error) {
+    console.error('Failed to toggle publish target', error)
+    toast.add({
+      severity: 'error',
+      summary: t('common.error'),
+      detail: t('noteEditor.targetUpdateError'),
+      life: 3000,
+    })
+  } finally {
+    integrationsLoading.value = false
+  }
+}
+
+const deletePublishTarget = (target) => {
+  confirm.require({
+    message: t('noteEditor.targetDeleteConfirm', { name: target.integration?.title || 'integration' }),
+    header: t('common.confirmation'),
+    icon: 'pi pi-exclamation-triangle',
+    accept: async () => {
+      integrationsLoading.value = true
+      try {
+        await integrationsStore.deletePublishTarget(target.id)
+        await integrationsStore.fetchPublishTargets({ content_type: 'note', object_id: noteUuid })
+      } catch (error) {
+        console.error('Failed to delete publish target', error)
+        toast.add({
+          severity: 'error',
+          summary: t('common.error'),
+          detail: t('noteEditor.targetDeleteError'),
+          life: 3000,
+        })
+      } finally {
+        integrationsLoading.value = false
+      }
+    }
+  })
 }
 
 // ─── Note meta sync ──────────────────────────────────────────────────────────
@@ -392,6 +644,27 @@ const deleteNote = async () => {
 
 watch(() => note.title, scheduleTitleSave)
 
+watch(selectedTargetOption, (option) => {
+  if (!option) {
+    newTargetForm.value.integration_id = null
+    newTargetForm.value.publish_settings = {}
+    return
+  }
+
+  if (option.kind === 'configured') {
+    newTargetForm.value.integration_id = option.integration_id
+    newTargetForm.value.publish_settings = {}
+    return
+  }
+
+  if (option.kind === 'library' && option.definition_code) {
+    newTargetForm.value.integration_id = null
+    newTargetForm.value.publish_settings = {}
+    selectedTargetOption.value = null
+    openConnectIntegrationDialog(option.definition_code)
+  }
+})
+
 onMounted(async () => {
   try {
     const serverData = await loadNote()
@@ -419,7 +692,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="actions">
-            <Button :label="$t('noteEditor.integrations')" icon="pi pi-share-alt" outlined @click="integrationsDialog = true" />
+            <Button :label="$t('noteEditor.integrations')" icon="pi pi-share-alt" outlined @click="openIntegrationsDialog" />
             <Button :label="$t('noteEditor.schedule')" icon="pi pi-calendar" outlined @click="openSchedule" />
             <Button :label="$t('noteEditor.publish')" icon="pi pi-check" severity="success" @click="markPublished" />
             <Button :label="$t('noteEditor.delete')" icon="pi pi-trash" severity="danger" outlined @click="deleteNote" />
@@ -506,32 +779,134 @@ onMounted(async () => {
     </Toast>
 
     <!-- Integrations dialog -->
-    <Dialog v-model:visible="integrationsDialog" :header="$t('noteEditor.integrationsDialog')" modal style="max-width: 720px;">
+    <Dialog v-model:visible="integrationsDialog" :header="$t('noteEditor.integrationsDialog')" modal style="max-width: 860px; width: 92vw;">
       <Message severity="info" :closable="false">
-        {{ $t('noteEditor.integrationsNotActive') }}
+        {{ $t('noteEditor.integrationsDescription') }}
       </Message>
-      <div class="integrations-grid">
-        <Card>
-          <template #title>Medium</template>
-          <template #content>
-            <div class="integration-row">
-              <span>{{ $t('noteEditor.integrationsStatus') }}</span>
-              <Tag severity="success">{{ $t('noteEditor.enabled') }}</Tag>
-            </div>
-          </template>
-        </Card>
-        <Card>
-          <template #title>Dev.to</template>
-          <template #content>
-            <div class="integration-row">
-              <span>{{ $t('noteEditor.integrationsStatus') }}</span>
-              <Tag severity="secondary">{{ $t('noteEditor.disabled') }}</Tag>
-            </div>
-          </template>
-        </Card>
+
+      <div class="integrations-toolbar">
+        <Button
+          :label="$t('noteEditor.addTarget')"
+          icon="pi pi-plus"
+          @click="openAddTargetDialog"
+          :disabled="integrationsLoading || noteIntegrationPickerOptions.length === 0"
+        />
       </div>
+
+      <DataTable
+        :value="noteTargets"
+        :loading="integrationsLoading"
+        responsive-layout="scroll"
+      >
+        <Column :header="$t('common.integration')" style="min-width: 220px;">
+          <template #body="{ data }">
+            <div>{{ data.integration?.title || '—' }}</div>
+          </template>
+        </Column>
+        <Column :header="$t('common.type')" style="min-width: 160px;">
+          <template #body="{ data }">
+            <span class="muted">{{ data.integration?.definition?.name || '—' }}</span>
+          </template>
+        </Column>
+        <Column :header="$t('common.enabled')" style="width: 120px;">
+          <template #body="{ data }">
+            <InputSwitch :modelValue="data.is_enabled" @update:modelValue="togglePublishTarget(data)" />
+          </template>
+        </Column>
+        <Column :header="$t('common.actions')" style="width: 120px;">
+          <template #body="{ data }">
+            <Button icon="pi pi-trash" text severity="danger" @click="deletePublishTarget(data)" />
+          </template>
+        </Column>
+
+        <template #empty>
+          <div class="empty-targets">
+            {{ $t('noteEditor.noTargets') }}
+          </div>
+        </template>
+      </DataTable>
+
       <template #footer>
         <Button :label="$t('common.close')" text @click="integrationsDialog = false" />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="addTargetDialog"
+      :header="$t('noteEditor.addTarget')"
+      modal
+      style="max-width: 640px; width: 92vw;"
+    >
+      <div class="form-grid">
+        <label class="field-label">
+          <span>{{ $t('common.integration') }}</span>
+          <Dropdown
+            v-model="selectedTargetOption"
+            :options="noteIntegrationPickerOptions"
+            optionGroupLabel="label"
+            optionGroupChildren="items"
+            optionLabel="label"
+            :placeholder="$t('noteEditor.selectIntegration')"
+            class="w-full"
+            filter
+            :filterPlaceholder="$t('noteEditor.searchIntegrations')"
+          />
+          <small class="field-hint">{{ $t('noteEditor.selectHint') }}</small>
+        </label>
+
+        <div v-if="selectedTargetPublishSchema.properties">
+          <h4 class="sub-title">{{ $t('noteEditor.publishSettings') }}</h4>
+          <DynamicSchemaForm
+            :schema="selectedTargetPublishSchema"
+            :modelValue="newTargetForm.publish_settings"
+            @update:modelValue="newTargetForm.publish_settings = $event"
+          />
+        </div>
+
+        <label class="field-inline">
+          <InputSwitch v-model="newTargetForm.is_enabled" />
+          <span>{{ $t('noteEditor.enabledByDefault') }}</span>
+        </label>
+      </div>
+
+      <template #footer>
+        <Button :label="$t('common.cancel')" text @click="closeAddTargetDialog" />
+        <Button :label="$t('common.add')" :disabled="!newTargetForm.integration_id" @click="addPublishTarget" />
+      </template>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="connectIntegrationDialog"
+      :header="$t('noteEditor.connectDialogTitle', { name: selectedLibraryDefinition?.name || '' })"
+      modal
+      style="max-width: 640px; width: 92vw;"
+    >
+      <div class="form-grid">
+        <Message severity="info" :closable="false">
+          {{ $t('noteEditor.connectDialogDescription') }}
+        </Message>
+
+        <label class="field-label">
+          <span>{{ $t('common.title') }}</span>
+          <InputText v-model="newIntegrationTitle" :placeholder="$t('noteEditor.integrationTitlePlaceholder')" />
+        </label>
+
+        <DynamicSchemaForm
+          v-if="selectedLibrarySchema.properties"
+          :schema="selectedLibrarySchema"
+          :modelValue="connectFormData"
+          @update:modelValue="connectFormData = $event"
+        />
+      </div>
+
+      <template #footer>
+        <Button :label="$t('common.cancel')" text @click="closeConnectIntegrationDialog" />
+        <Button
+          :label="$t('noteEditor.connectAndSelect')"
+          :disabled="!newIntegrationTitle.trim()"
+          :loading="integrationsLoading"
+          @click="connectAndSelectForTarget"
+        />
       </template>
     </Dialog>
   </div>
@@ -592,17 +967,54 @@ onMounted(async () => {
   padding: 16px 0 8px;
 }
 
-.integrations-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
+.integrations-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin: 12px 0;
 }
 
-.integration-row {
-  display: flex;
-  justify-content: space-between;
+.empty-targets {
+  padding: 20px;
+  text-align: center;
+  color: #6b7280;
+}
+
+.form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.field-label {
+  display: grid;
+  gap: 8px;
+
+  span {
+    font-size: 14px;
+    font-weight: 500;
+    color: #374151;
+  }
+}
+
+.field-hint {
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.field-inline {
+  display: inline-flex;
   align-items: center;
+  gap: 8px;
+}
+
+.sub-title {
+  margin: 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.muted {
+  color: #6b7280;
 }
 
 .w-full {

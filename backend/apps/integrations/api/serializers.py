@@ -99,7 +99,13 @@ class PublishTargetSerializer(serializers.ModelSerializer):
         source='content_type',
         queryset=ContentType.objects.all(),
         write_only=True,
-        required=True,
+        required=False,
+    )
+    content_type = serializers.SlugRelatedField(
+        slug_field='model',
+        queryset=ContentType.objects.all(),
+        write_only=True,
+        required=False,
     )
     object_id = serializers.CharField(write_only=True, required=True)
 
@@ -109,6 +115,7 @@ class PublishTargetSerializer(serializers.ModelSerializer):
             'id',
             'integration',
             'integration_id',
+            'content_type',
             'content_type_id',
             'object_id',
             'publish_settings',
@@ -140,16 +147,27 @@ class PublishTargetSerializer(serializers.ModelSerializer):
         integration = attrs.get('integration')
         if integration and integration.owner != self.context['request'].user:
             raise ValidationError({'integration_id': 'Integration does not belong to the current user.'})
-        # object_id must be provided as valid UUID string
+        # For create, content_type/content_type_id is required.
+        # For partial updates (e.g. toggling is_enabled), keep existing value.
+        if self.instance is None and attrs.get('content_type') is None:
+            raise ValidationError(
+                {
+                    'content_type': (
+                        'Either content_type or content_type_id is required.'
+                    )
+                }
+            )
+        # For create, object_id is required. For updates, keep existing object_id.
         obj = attrs.get('object_id')
-        if obj is None or str(obj) == '':
+        if self.instance is None and (obj is None or str(obj) == ''):
             raise ValidationError({'object_id': 'This field is required.'})
-        try:
-            import uuid
+        if obj is not None and str(obj) != '':
+            try:
+                import uuid
 
-            uuid.UUID(str(obj))
-        except Exception:
-            raise ValidationError({'object_id': 'Must be a valid UUID.'})
+                uuid.UUID(str(obj))
+            except Exception:
+                raise ValidationError({'object_id': 'Must be a valid UUID.'})
         return super().validate(attrs)
 
 
