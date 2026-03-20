@@ -66,7 +66,11 @@ onMounted(() => {
         :loading="store.loading"
         responsiveLayout="scroll"
       >
-        <Column field="title" :header="$t('common.title')" />
+        <Column :header="$t('common.title')">
+          <template #body="{ data }">
+            {{ data.title || $t('notes.untitled') }}
+          </template>
+        </Column>
         <Column :header="$t('common.status')" style="width: 180px;">
           <template #body="{ data }">
             <Tag v-if="data.status === 'draft'" severity="info">{{ statusLabels.draft }}</Tag>
