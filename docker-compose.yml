@@ -15,6 +15,19 @@ services:
     volumes:
       - postgres_data_dev:/var/lib/postgresql
 
+  redis:
+    image: redis:8-alpine
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+
   backend:
     build: ./backend
     command: >
@@ -27,6 +40,22 @@ services:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-worker:
+    build: ./backend
+    command: >
+      sh -c "watchmedo auto-restart --directory=/app --pattern=*.py --recursive -- celery -A config worker -l info -P solo"
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env.dev
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:
@@ -42,3 +71,4 @@ services:
 
 volumes:
   postgres_data_dev:
+  redis_data_dev:

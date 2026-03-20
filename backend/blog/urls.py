@@ -9,7 +9,8 @@ from .views import (
     BlogIntegrationViewSet,
     BlogViewSet,
     BlogIntegrationDefaultViewSet,
-    # Note: old IntegrationViewSet from blog will be replaced by new one imported below
+    # Old IntegrationViewSet from blog
+    # is replaced by the new one imported below.
     NoteHeaderViewSet,
     NoteIntegrationViewSet,
     NoteTextContentViewSet,
@@ -23,14 +24,26 @@ from apps.integrations.api.views import (
     IntegrationViewSet as NewIntegrationViewSet,
     PublishTargetViewSet,
 )
+from apps.ai_writing.views import (
+    AIGenerationJobViewSet,
+    AIGenerationLogViewSet,
+)
 
 router = DefaultRouter()
 router.register('auth/register', RegisterViewSet, basename='register')
 router.register('blogs', BlogViewSet, basename='blogs')
 router.register('notes', NoteViewSet, basename='notes')
 router.register('integrations', NewIntegrationViewSet, basename='integrations')
-router.register('integration-definitions', IntegrationDefinitionViewSet, basename='integration-definitions')
-router.register('publish-targets', PublishTargetViewSet, basename='publish-targets')
+router.register(
+    'integration-definitions',
+    IntegrationDefinitionViewSet,
+    basename='integration-definitions',
+)
+router.register(
+    'publish-targets',
+    PublishTargetViewSet,
+    basename='publish-targets',
+)
 router.register(
     'blog-integrations',
     BlogIntegrationViewSet,
@@ -52,6 +65,16 @@ router.register(
     BlogIntegrationDefaultViewSet,
     basename='blog-default-integrations',
 )
+router.register(
+    'ai-generation-jobs',
+    AIGenerationJobViewSet,
+    basename='ai-generation-jobs',
+)
+router.register(
+    'ai-generation-logs',
+    AIGenerationLogViewSet,
+    basename='ai-generation-logs',
+)
 
 urlpatterns = [
     path(
@@ -62,4 +85,3 @@ urlpatterns = [
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
     path('', include(router.urls)),
 ]
-

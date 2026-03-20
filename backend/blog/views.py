@@ -5,9 +5,27 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent, BlogIntegrationDefault
+from apps.ai_platform.constants import (
+    OPERATION_WRITE_MORE_TEXT,
+    OPERATION_WRITE_NEW_CHAPTER,
+    OPERATION_WRITE_NOTE,
+    OPERATION_WRITE_STRUCTURE,
+)
+from apps.ai_writing.services.jobs import create_generation_job
+from apps.integrations.services.note_creation_service import (
+    create_publish_targets_from_defaults,
+)
+from .models import (
+    Blog,
+    BlogIntegration,
+    BlogIntegrationDefault,
+    Integration,
+    Note,
+    NoteHeader,
+    NoteIntegration,
+    NoteTextContent,
+)
 from .permissions import IsOwner
-from apps.integrations.services.note_creation_service import create_publish_targets_from_defaults
 from .serializers import (
     BlogIntegrationSerializer,
     BlogSerializer,
@@ -87,6 +105,99 @@ class NoteViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(note)
         return Response(serializer.data)
 
+    def _create_ai_job(
+        self,
+        request,
+        note,
+        operation_type,
+        require_source_block=False,
+    ):
+        source_block_uuid = request.data.get('source_block_uuid')
+        if require_source_block and not source_block_uuid:
+            return Response(
+                {'detail': 'source_block_uuid is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if source_block_uuid:
+            is_in_note = NoteTextContent.objects.filter(
+                note=note,
+                uuid=source_block_uuid,
+            ).exists() or NoteHeader.objects.filter(
+                note=note,
+                uuid=source_block_uuid,
+            ).exists()
+            if not is_in_note:
+                return Response(
+                    {
+                        'detail': (
+                            'source_block_uuid does not belong to this note.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if operation_type in (OPERATION_WRITE_STRUCTURE, OPERATION_WRITE_NOTE):
+            has_content = (
+                note.headers.exists()
+                or note.text_contents.exists()
+                or bool(note.body.strip())
+            )
+            if has_content:
+                return Response(
+                    {'detail': 'This action is allowed only for empty notes.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        idempotency_key = request.headers.get('Idempotency-Key', '').strip()
+        job = create_generation_job(
+            owner=request.user,
+            note=note,
+            operation_type=operation_type,
+            source_block_uuid=source_block_uuid,
+            request_payload=request.data,
+            idempotency_key=idempotency_key,
+        )
+
+        return Response(
+            {
+                'job_uuid': str(job.uuid),
+                'status': job.status,
+                'operation_type': job.operation_type,
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='ai/write-structure')
+    def ai_write_structure(self, request, *args, **kwargs):
+        note = self.get_object()
+        return self._create_ai_job(request, note, OPERATION_WRITE_STRUCTURE)
+
+    @action(detail=True, methods=['post'], url_path='ai/write-note')
+    def ai_write_note(self, request, *args, **kwargs):
+        note = self.get_object()
+        return self._create_ai_job(request, note, OPERATION_WRITE_NOTE)
+
+    @action(detail=True, methods=['post'], url_path='ai/write-new-chapter')
+    def ai_write_new_chapter(self, request, *args, **kwargs):
+        note = self.get_object()
+        return self._create_ai_job(
+            request,
+            note,
+            OPERATION_WRITE_NEW_CHAPTER,
+            require_source_block=True,
+        )
+
+    @action(detail=True, methods=['post'], url_path='ai/write-more-text')
+    def ai_write_more_text(self, request, *args, **kwargs):
+        note = self.get_object()
+        return self._create_ai_job(
+            request,
+            note,
+            OPERATION_WRITE_MORE_TEXT,
+            require_source_block=True,
+        )
+
 
 class IntegrationViewSet(viewsets.ModelViewSet):
     serializer_class = IntegrationSerializer
@@ -120,7 +231,10 @@ class BlogIntegrationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         blog = serializer.validated_data['blog']
         integration = serializer.validated_data['integration']
-        if blog.owner_id != self.request.user.id or integration.owner_id != self.request.user.id:
+        if (
+            blog.owner_id != self.request.user.id
+            or integration.owner_id != self.request.user.id
+        ):
             raise PermissionDenied('Invalid integration owner')
         serializer.save(blog=blog)
 
@@ -217,7 +331,7 @@ class NoteTextContentViewSet(
 
 class BlogIntegrationDefaultViewSet(viewsets.ModelViewSet):
     """ViewSet for managing default integrations for a blog.
-    
+
     Supports filtering by blog_uuid query parameter:
     GET    /api/blog-default-integrations/?blog_uuid={uuid}
     POST   /api/blog-default-integrations/
@@ -245,16 +359,16 @@ class BlogIntegrationDefaultViewSet(viewsets.ModelViewSet):
         blog_uuid = self.request.data.get('blog_uuid')
         if not blog_uuid:
             raise PermissionDenied('blog_uuid is required')
-        
+
         try:
             blog = Blog.objects.get(uuid=blog_uuid, owner=self.request.user)
         except Blog.DoesNotExist:
             raise PermissionDenied('Invalid blog')
-        
+
         integration = serializer.validated_data['integration']
         if integration.owner_id != self.request.user.id:
             raise PermissionDenied('Invalid integration owner')
-        
+
         serializer.save(blog=blog)
 
     def perform_update(self, serializer):

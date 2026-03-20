@@ -13,15 +13,17 @@
 ## Локальная разработка (docker-compose)
 1. Заполните .env.dev при необходимости.
 2. Запустите проект:
-   - docker compose -f docker-compose.dev.yml up --build
+   - docker compose up --build
 3. Frontend: http://localhost:5173
 4. Backend API: http://localhost:8000/api
+5. Для асинхронных задач запускаются сервисы Redis и Celery worker.
 
 ## Деплой (docker-compose)
-1. Скопируйте .env.prod.example в .env.prod и заполните значения.
+1. Скопируйте .env.prod.example в .env и заполните значения.
 2. Запуск:
-   - docker compose -f docker-compose.prod.yml up --build -d
+   - docker compose -f docker-compose.production.yml up --build -d
 3. Frontend: http://<your-domain>
+4. В проде также запускаются Redis и Celery worker.
 
 ## Django команды
 - Миграции: python manage.py migrate

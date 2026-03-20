@@ -1,10 +1,11 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'primevue/usetoast'
 import { useConfirm } from 'primevue/useconfirm'
 import { api } from '~/src/shared/api'
+import { useAiJobsStore } from '~/src/entities/ai-jobs'
 import { useNotesStore } from '~/src/entities/note'
 import { useIntegrationsStore } from '~/src/entities/integrations'
 import { NoteBlockText, NoteBlockHeader, BlockAdder } from '~/src/features/note-blocks'
@@ -26,6 +27,7 @@ const router = useRouter()
 const { t } = useI18n()
 const toast = useToast()
 const confirm = useConfirm()
+const aiJobsStore = useAiJobsStore()
 const store = useNotesStore()
 const integrationsStore = useIntegrationsStore()
 const noteUuid = route.params.id
@@ -47,6 +49,7 @@ const addTargetDialog = ref(false)
 const connectIntegrationDialog = ref(false)
 const scheduleDate = ref(null)
 const saving = ref(false)
+const aiGenerating = ref(false)
 const integrationsLoading = ref(false)
 const lastSaved = ref(null)
 const cachedServerData = ref(null)
@@ -87,6 +90,11 @@ function uid() {
 
 function reorder() {
   blocks.value.forEach((b, i) => { b.order = i })
+}
+
+function clearSyncTimers() {
+  syncTimers.forEach((timer) => clearTimeout(timer))
+  syncTimers.clear()
 }
 
 // ─── Per-block API sync (debounced) ──────────────────────────────────────────
@@ -139,6 +147,15 @@ async function deleteBlockFromServer(block) {
   }
 }
 
+async function flushEditorState() {
+  await store.updateNote(noteUuid, {
+    title: note.title,
+    status: note.status,
+    scheduled_at: note.scheduled_at,
+  })
+  await Promise.all(blocks.value.map((block) => syncBlock(block)))
+}
+
 // ─── Block CRUD ──────────────────────────────────────────────────────────────
 function addBlock(type, afterIndex) {
   const newBlock = {
@@ -166,6 +183,67 @@ function removeBlock(localId) {
 function onBlockChange(block) {
   persistLocal()
   scheduleBlockSync(block)
+}
+
+const isNoteServerEmpty = computed(() => {
+  if (!cachedServerData.value) return false
+  return (
+    (cachedServerData.value.headers?.length ?? 0) === 0 &&
+    (cachedServerData.value.text_contents?.length ?? 0) === 0
+  )
+})
+
+async function onAISuccess(job) {
+  clearLocal()
+  await loadNote()
+  aiGenerating.value = false
+  aiJobsStore.clearActiveJob()
+  toast.add({
+    severity: 'success',
+    summary: t('common.success'),
+    detail: t('noteEditor.aiJobSuccess'),
+    life: 3000,
+  })
+}
+
+async function onAIError(job) {
+  aiGenerating.value = false
+  aiJobsStore.clearActiveJob()
+  toast.add({
+    severity: 'error',
+    summary: t('common.error'),
+    detail: job?.error_message || t('noteEditor.aiJobFailed'),
+    life: 5000,
+  })
+}
+
+async function triggerAIAction(operation, sourceBlockUuid = null) {
+  if (aiGenerating.value) return
+
+  aiGenerating.value = true
+  try {
+    clearSyncTimers()
+    if (titleTimer) {
+      clearTimeout(titleTimer)
+      titleTimer = null
+    }
+    await flushEditorState()
+    await aiJobsStore.triggerJob(noteUuid, operation, sourceBlockUuid)
+    aiJobsStore.startPolling(onAISuccess, onAIError)
+  } catch (error) {
+    await onAIError({
+      error_message: (
+        error.response?.data?.detail ||
+        error.response?.data?.source_block_uuid?.[0] ||
+        error.response?.data?.non_field_errors?.[0] ||
+        error.message
+      ),
+    })
+  }
+}
+
+function onBlockAI({ operation, sourceBlockUuid }) {
+  triggerAIAction(operation, sourceBlockUuid)
 }
 
 const noteTargets = computed(() => integrationsStore.publishTargets)
@@ -479,11 +557,7 @@ function checkLocalVsServer(serverData) {
   if (!localMetaRaw && !localBlocksRaw) return
 
   // special-case: brand new note with only default empty blocks
-  if (
-    serverData.headers.length === 0 &&
-    serverData.text_contents.length === 0 &&
-    localBlocksRaw
-  ) {
+  if (serverData.headers.length === 0 && serverData.text_contents.length === 0 && localBlocksRaw) {
     try {
       const lb = JSON.parse(localBlocksRaw)
       if (
@@ -626,14 +700,7 @@ async function loadNote() {
   // Apply server data as the baseline; checkLocalVsServer() will override if local is newer
   Object.assign(note, { title: data.title, status: data.status, scheduled_at: data.scheduled_at })
   const serverBlocks = buildBlocksFromServer(data)
-  if (serverBlocks.length > 0) {
-    blocks.value = serverBlocks
-  } else {
-    // Seed default blocks for a brand new note (synced only on first edit)
-    const header = { localId: uid(), serverId: null, type: 'header', text: '', level: 2, order: 0 }
-    const text   = { localId: uid(), serverId: null, type: 'text',   html: '',  order: 1 }
-    blocks.value = [header, text]
-  }
+  blocks.value = serverBlocks
 
   return data
 }
@@ -697,6 +764,12 @@ onMounted(async () => {
     })
   }
 })
+
+onBeforeUnmount(() => {
+  clearSyncTimers()
+  if (titleTimer) clearTimeout(titleTimer)
+  aiJobsStore.stopPolling()
+})
 </script>
 
 <template>
@@ -707,7 +780,8 @@ onMounted(async () => {
           <div>
             <div class="editor-title">{{ $t('noteEditor.title') }}</div>
             <div class="save-status">
-              <span v-if="saving">{{ $t('noteEditor.saving') }}</span>
+              <span v-if="aiGenerating">{{ $t('noteEditor.aiGenerating') }}</span>
+              <span v-else-if="saving">{{ $t('noteEditor.saving') }}</span>
               <span v-else-if="lastSaved">{{ $t('noteEditor.saved') }} {{ lastSaved.toLocaleTimeString() }}</span>
             </div>
           </div>
@@ -728,8 +802,16 @@ onMounted(async () => {
 
         <!-- Blocks -->
         <div class="blocks">
+          <div v-if="aiGenerating" class="ai-overlay">
+            <i class="pi pi-spin pi-spinner" />
+            <span>{{ $t('noteEditor.aiGenerating') }}</span>
+          </div>
+
           <!-- Adder before first block -->
-          <BlockAdder @add="addBlock($event, -1)" />
+          <BlockAdder
+            :disabled="aiGenerating"
+            @add="addBlock($event, -1)"
+          />
 
           <template v-for="(block, index) in blocks" :key="block.localId">
             <NoteBlockHeader
@@ -748,12 +830,30 @@ onMounted(async () => {
             />
 
             <!-- Adder after each block -->
-            <BlockAdder @add="addBlock($event, index)" />
+            <BlockAdder
+              :disabled="aiGenerating"
+              :sourceBlockUuid="block.serverId"
+              @add="addBlock($event, index)"
+              @add-ai="onBlockAI"
+            />
           </template>
 
           <!-- Empty state hint -->
           <div v-if="blocks.length === 0" class="empty-hint">
-            {{ $t('noteEditor.emptyHint') }}
+            <p>{{ $t('noteEditor.emptyHint') }}</p>
+            <div v-if="isNoteServerEmpty && !aiGenerating" class="empty-ai-actions">
+              <Button
+                :label="$t('noteEditor.aiWriteStructure')"
+                icon="pi pi-sparkles"
+                outlined
+                @click="triggerAIAction('write-structure')"
+              />
+              <Button
+                :label="$t('noteEditor.aiWriteFullNote')"
+                icon="pi pi-sparkles"
+                @click="triggerAIAction('write-note')"
+              />
+            </div>
           </div>
         </div>
       </template>
@@ -975,6 +1075,7 @@ onMounted(async () => {
 }
 
 .blocks {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -985,6 +1086,31 @@ onMounted(async () => {
   color: #9ca3af;
   font-size: 13px;
   padding: 16px 0 8px;
+
+  p {
+    margin: 0;
+  }
+}
+
+.empty-ai-actions {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.ai-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  color: #1f2937;
+  font-size: 14px;
+  backdrop-filter: blur(2px);
 }
 
 .integrations-toolbar {
