@@ -1,21 +1,55 @@
 <script setup>
 import { ref } from 'vue'
 
-const emit = defineEmits(['add'])
+const props = defineProps({
+  disabled: {
+    type: Boolean,
+    default: false,
+  },
+  canUseAI: {
+    type: Boolean,
+    default: false,
+  },
+  sourceBlockUuid: {
+    type: String,
+    default: null,
+  },
+})
+
+const emit = defineEmits(['add', 'add-ai'])
 
 const open = ref(false)
 
 function add(type) {
+  if (props.disabled) return
   open.value = false
   emit('add', type)
+}
+
+function addAI(operation) {
+  if (props.disabled || !props.sourceBlockUuid) return
+  open.value = false
+  emit('add-ai', {
+    operation,
+    sourceBlockUuid: props.sourceBlockUuid,
+  })
 }
 </script>
 
 <template>
   <div class="block-adder">
-    <div class="adder-line" @click="open = !open">
+    <div
+      class="adder-line"
+      :class="{ disabled }"
+      @click="!disabled && (open = !open)"
+    >
       <div class="line" />
-      <button type="button" class="plus-btn" :class="{ active: open }">
+      <button
+        type="button"
+        class="plus-btn"
+        :class="{ active: open }"
+        :disabled="disabled"
+      >
         <i class="pi pi-plus" />
       </button>
       <div class="line" />
@@ -30,6 +64,24 @@ function add(type) {
         <button type="button" class="add-option" @click="add('text')">
           <i class="pi pi-align-left" />
           {{ $t('blocks.text') }}
+        </button>
+        <button
+          v-if="sourceBlockUuid && canUseAI"
+          type="button"
+          class="add-option add-option-ai"
+          @click="addAI('write-more-text')"
+        >
+          <i class="pi pi-sparkles" />
+          {{ $t('blocks.aiWriteMoreText') }}
+        </button>
+        <button
+          v-if="sourceBlockUuid && canUseAI"
+          type="button"
+          class="add-option add-option-ai"
+          @click="addAI('write-new-chapter')"
+        >
+          <i class="pi pi-sparkles" />
+          {{ $t('blocks.aiNewChapter') }}
         </button>
       </div>
     </Transition>
@@ -46,6 +98,11 @@ function add(type) {
   align-items: center;
   gap: 8px;
   cursor: pointer;
+
+  &.disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
 }
 
 .line {
@@ -113,6 +170,12 @@ function add(type) {
     border-color: #6366f1;
     color: #6366f1;
   }
+}
+
+.add-option-ai {
+  border-color: #c7d2fe;
+  color: #4338ca;
+  background: #eef2ff;
 }
 
 // Transition

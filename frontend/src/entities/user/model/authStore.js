@@ -8,6 +8,7 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref(localStorage.getItem('refreshToken') || '')
 
   const isAuthenticated = computed(() => Boolean(accessToken.value))
+  const canUseAI = computed(() => Boolean(user.value?.can_use_ai))
 
   const setTokens = (access, refresh) => {
     accessToken.value = access
@@ -16,9 +17,15 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.setItem('refreshToken', refresh)
   }
 
+  const fetchUser = async () => {
+    const { data } = await api.get('/auth/me/')
+    user.value = data
+  }
+
   const login = async ({ username, password }) => {
     const { data } = await api.post('/auth/token/', { username, password })
     setTokens(data.access, data.refresh)
+    await fetchUser()
   }
 
   const register = async ({ username, email, password }) => {
@@ -38,7 +45,9 @@ export const useAuthStore = defineStore('auth', () => {
     accessToken,
     refreshToken,
     isAuthenticated,
+    canUseAI,
     setTokens,
+    fetchUser,
     login,
     register,
     logout

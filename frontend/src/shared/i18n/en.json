@@ -156,6 +156,11 @@
     "enabled": "Enabled",
     "disabled": "Disabled",
     "emptyHint": "Click + above to add your first block",
+    "aiWriteStructure": "Write structure",
+    "aiWriteFullNote": "Write full note",
+    "aiGenerating": "AI is generating content…",
+    "aiJobSuccess": "Content generated successfully",
+    "aiJobFailed": "AI generation failed",
     "saveError": "Failed to save",
     "notFound": "Note not found",
     "syncWarningTitle": "Unsaved Local Changes",
@@ -170,6 +175,8 @@
   "blocks": {
     "header": "Header",
     "text": "Text block",
+    "aiWriteMoreText": "Write more text",
+    "aiNewChapter": "New chapter after this",
     "deleteBlock": "Delete block",
     "headingPlaceholder": "Heading {level}\u2026",
     "toolbar": {

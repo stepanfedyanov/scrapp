@@ -1,7 +1,21 @@
 <script setup>
+import { onMounted } from 'vue'
 import { AppHeader } from '~/src/widgets/app-header'
 import Toast from 'primevue/toast'
 import ConfirmDialog from 'primevue/confirmdialog'
+import { useAuthStore } from '~/src/entities/user'
+
+const authStore = useAuthStore()
+
+onMounted(async () => {
+  if (authStore.isAuthenticated) {
+    try {
+      await authStore.fetchUser()
+    } catch {
+      // token may be expired; router guards will handle redirect
+    }
+  }
+})
 </script>
 
 <template>
