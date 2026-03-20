@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'blog.apps.BlogConfig',
+    'apps.integrations.apps.IntegrationsConfig',
 ]
 
 MIDDLEWARE = [

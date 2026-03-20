@@ -2,8 +2,8 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent
-
+from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent, BlogIntegrationDefault
+from apps.integrations.models import IntegrationDefinition
 
 User = get_user_model()
 
@@ -29,15 +29,24 @@ class RegisterSerializer(serializers.ModelSerializer):
         )
         return user
 
-
 class IntegrationSerializer(serializers.ModelSerializer):
+    definition = serializers.PrimaryKeyRelatedField(
+        queryset=IntegrationDefinition.objects.all(),
+        required=False,
+    )
+
     class Meta:
         model = Integration
         fields = (
             'id',
             'name',
+            'title',
             'provider',
+            'definition',
             'config',
+            'credentials',
+            'status',
+            'last_error',
             'created_at',
             'updated_at',
         )
@@ -66,6 +75,29 @@ class BlogIntegrationSerializer(serializers.ModelSerializer):
             'integration_id',
             'enabled',
             'settings',
+            'created_at',
+            'updated_at',
+        )
+        read_only_fields = ('created_at', 'updated_at')
+
+
+class BlogIntegrationDefaultSerializer(serializers.ModelSerializer):
+    """Serializer for blog default integrations."""
+    integration = IntegrationSerializer(read_only=True)
+    integration_id = serializers.PrimaryKeyRelatedField(
+        source='integration',
+        queryset=Integration.objects.alive(),
+        write_only=True,
+    )
+
+    class Meta:
+        model = BlogIntegrationDefault
+        fields = (
+            'id',
+            'integration',
+            'integration_id',
+            'publish_settings',
+            'is_enabled',
             'created_at',
             'updated_at',
         )

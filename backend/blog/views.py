@@ -5,8 +5,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent
+from .models import Blog, Note, Integration, BlogIntegration, NoteIntegration, NoteHeader, NoteTextContent, BlogIntegrationDefault
 from .permissions import IsOwner
+from apps.integrations.services.note_creation_service import create_publish_targets_from_defaults
 from .serializers import (
     BlogIntegrationSerializer,
     BlogSerializer,
@@ -16,6 +17,7 @@ from .serializers import (
     NoteSerializer,
     NoteTextContentSerializer,
     RegisterSerializer,
+    BlogIntegrationDefaultSerializer,
 )
 
 
@@ -64,7 +66,9 @@ class NoteViewSet(viewsets.ModelViewSet):
         blog = serializer.validated_data['blog']
         if blog.owner_id != self.request.user.id:
             raise PermissionDenied('Invalid blog owner')
-        serializer.save()
+        note = serializer.save()
+        # Auto-create publish targets from blog defaults
+        create_publish_targets_from_defaults(note)
 
     def destroy(self, request, *args, **kwargs):
         note = self.get_object()
@@ -208,4 +212,54 @@ class NoteTextContentViewSet(
         note = serializer.validated_data['note']
         if note.blog.owner_id != self.request.user.id:
             raise PermissionDenied('Invalid note owner')
+        serializer.save()
+
+
+class BlogIntegrationDefaultViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing default integrations for a blog.
+    
+    Supports filtering by blog_uuid query parameter:
+    GET    /api/blog-default-integrations/?blog_uuid={uuid}
+    POST   /api/blog-default-integrations/
+    PATCH  /api/blog-default-integrations/{id}/
+    DELETE /api/blog-default-integrations/{id}/
+    """
+    serializer_class = BlogIntegrationDefaultSerializer
+    permission_classes = [IsOwner]
+
+    def get_queryset(self):
+        """Filter to user's integrations only."""
+        queryset = (
+            BlogIntegrationDefault.objects
+            .filter(blog__owner=self.request.user)
+            .select_related('blog', 'integration')
+        )
+        # Allow filtering by blog_uuid
+        blog_uuid = self.request.query_params.get('blog_uuid')
+        if blog_uuid:
+            queryset = queryset.filter(blog__uuid=blog_uuid)
+        return queryset
+
+    def perform_create(self, serializer):
+        """Ensure blog belongs to user and integration is owned by user."""
+        blog_uuid = self.request.data.get('blog_uuid')
+        if not blog_uuid:
+            raise PermissionDenied('blog_uuid is required')
+        
+        try:
+            blog = Blog.objects.get(uuid=blog_uuid, owner=self.request.user)
+        except Blog.DoesNotExist:
+            raise PermissionDenied('Invalid blog')
+        
+        integration = serializer.validated_data['integration']
+        if integration.owner_id != self.request.user.id:
+            raise PermissionDenied('Invalid integration owner')
+        
+        serializer.save(blog=blog)
+
+    def perform_update(self, serializer):
+        """Validate ownership on update."""
+        integration = serializer.validated_data.get('integration')
+        if integration and integration.owner_id != self.request.user.id:
+            raise PermissionDenied('Invalid integration owner')
         serializer.save()

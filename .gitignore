@@ -1,3 +1,10 @@
 .DS_Store
 .env
 .venv
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+*.log
+*.env

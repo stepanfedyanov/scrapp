@@ -49,10 +49,21 @@ class Blog(SoftDeleteModel):
 
 
 class Integration(SoftDeleteModel):
+    # existing provider choices remain for backward compatibility
     PROVIDERS = [
         ('medium', 'Medium'),
         ('devto', 'Dev.to'),
         ('telegram', 'Telegram'),
+    ]
+
+    STATUS_ACTIVE = 'active'
+    STATUS_DISABLED = 'disabled'
+    STATUS_ERROR = 'error'
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_DISABLED, 'Disabled'),
+        (STATUS_ERROR, 'Error'),
     ]
 
     owner = models.ForeignKey(
@@ -60,14 +71,34 @@ class Integration(SoftDeleteModel):
         on_delete=models.PROTECT,
         related_name='integrations',
     )
+    # new association to definition
+    definition = models.ForeignKey(
+        'integrations.IntegrationDefinition',
+        on_delete=models.PROTECT,
+        related_name='integrations',
+        null=True,
+        blank=True,
+    )
+    # legacy name field stays, but add user-visible title
     name = models.CharField(max_length=120)
+    title = models.CharField(max_length=200)
     provider = models.CharField(max_length=32, choices=PROVIDERS)
+    # leave `config` present for backward compatibility
     config = models.JSONField(default=dict, blank=True)
+    credentials = models.JSONField(default=dict, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+        db_index=True,
+    )
+    last_error = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self) -> str:
-        return self.name
+        # title is the human friendly name
+        return self.title or self.name
 
 
 class Note(SoftDeleteModel):
@@ -131,6 +162,46 @@ class BlogIntegration(SoftDeleteModel):
 
     class Meta:
         unique_together = ('blog', 'integration')
+
+
+class BlogIntegrationDefault(models.Model):
+    """Default integrations for a blog.
+    
+    When a new Note is created in a blog, PublishTargets are automatically
+    created from these defaults. The inheritance happens at creation time only.
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    blog = models.ForeignKey(
+        Blog,
+        on_delete=models.PROTECT,
+        related_name='default_integrations',
+        db_index=True,
+    )
+    integration = models.ForeignKey(
+        Integration,
+        on_delete=models.PROTECT,
+        related_name='blog_defaults',
+        db_index=True,
+    )
+    publish_settings = models.JSONField(default=dict, blank=True)
+    is_enabled = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('blog', 'integration')
+        ordering = ['blog', 'created_at']
+        indexes = [
+            models.Index(fields=['blog']),
+            models.Index(fields=['integration']),
+        ]
+
+    def __str__(self):
+        return f"Default({self.blog_id}, {self.integration_id})"
 
 
 class NoteIntegration(SoftDeleteModel):
