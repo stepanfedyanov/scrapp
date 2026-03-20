@@ -63,6 +63,9 @@ class AIGenerationJob(models.Model):
             models.Index(fields=['note', 'created_at']),
             models.Index(fields=['owner', 'created_at']),
         ]
+        permissions = [
+            ('can_use_ai', 'Can use AI features'),
+        ]
 
     def __str__(self):
         return f'{self.operation_type} ({self.status})'

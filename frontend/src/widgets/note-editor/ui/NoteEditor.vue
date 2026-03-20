@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from 'primevue/usetoast'
@@ -8,6 +9,7 @@ import { api } from '~/src/shared/api'
 import { useAiJobsStore } from '~/src/entities/ai-jobs'
 import { useNotesStore } from '~/src/entities/note'
 import { useIntegrationsStore } from '~/src/entities/integrations'
+import { useAuthStore } from '~/src/entities/user'
 import { NoteBlockText, NoteBlockHeader, BlockAdder } from '~/src/features/note-blocks'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
@@ -30,6 +32,7 @@ const confirm = useConfirm()
 const aiJobsStore = useAiJobsStore()
 const store = useNotesStore()
 const integrationsStore = useIntegrationsStore()
+const { canUseAI } = storeToRefs(useAuthStore())
 const noteUuid = route.params.id
 
 // ─── Note meta ───────────────────────────────────────────────────────────────
@@ -832,6 +835,7 @@ onBeforeUnmount(() => {
             <!-- Adder after each block -->
             <BlockAdder
               :disabled="aiGenerating"
+              :canUseAI="canUseAI"
               :sourceBlockUuid="block.serverId"
               @add="addBlock($event, index)"
               @add-ai="onBlockAI"
@@ -841,7 +845,7 @@ onBeforeUnmount(() => {
           <!-- Empty state hint -->
           <div v-if="blocks.length === 0" class="empty-hint">
             <p>{{ $t('noteEditor.emptyHint') }}</p>
-            <div v-if="isNoteServerEmpty && !aiGenerating" class="empty-ai-actions">
+            <div v-if="isNoteServerEmpty && !aiGenerating && canUseAI" class="empty-ai-actions">
               <Button
                 :label="$t('noteEditor.aiWriteStructure')"
                 icon="pi pi-sparkles"

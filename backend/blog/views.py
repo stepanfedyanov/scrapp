@@ -1,8 +1,8 @@
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 from apps.ai_platform.constants import (
@@ -11,6 +11,7 @@ from apps.ai_platform.constants import (
     OPERATION_WRITE_NOTE,
     OPERATION_WRITE_STRUCTURE,
 )
+from apps.ai_writing.permissions import HasAIAccess
 from apps.ai_writing.services.jobs import create_generation_job
 from apps.integrations.services.note_creation_service import (
     create_publish_targets_from_defaults,
@@ -42,6 +43,17 @@ from .serializers import (
 class RegisterViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     serializer_class = RegisterSerializer
     permission_classes = [AllowAny]
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def me_view(request):
+    return Response({
+        'id': request.user.pk,
+        'username': request.user.username,
+        'email': request.user.email,
+        'can_use_ai': request.user.has_perm('ai_writing.can_use_ai'),
+    })
 
 
 class BlogViewSet(viewsets.ModelViewSet):
@@ -112,6 +124,12 @@ class NoteViewSet(viewsets.ModelViewSet):
         operation_type,
         require_source_block=False,
     ):
+        if not HasAIAccess().has_permission(request, self):
+            return Response(
+                {'detail': HasAIAccess.message},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         source_block_uuid = request.data.get('source_block_uuid')
         if require_source_block and not source_block_uuid:
             return Response(

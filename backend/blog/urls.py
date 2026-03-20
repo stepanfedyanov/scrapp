@@ -16,6 +16,7 @@ from .views import (
     NoteTextContentViewSet,
     NoteViewSet,
     RegisterViewSet,
+    me_view,
 )
 
 # import new API viewsets
@@ -83,5 +84,6 @@ urlpatterns = [
         name='token_obtain_pair',
     ),
     path('auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+    path('auth/me/', me_view, name='auth_me'),
     path('', include(router.urls)),
 ]

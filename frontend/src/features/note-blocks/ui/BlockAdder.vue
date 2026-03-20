@@ -6,6 +6,10 @@ const props = defineProps({
     type: Boolean,
     default: false,
   },
+  canUseAI: {
+    type: Boolean,
+    default: false,
+  },
   sourceBlockUuid: {
     type: String,
     default: null,
@@ -62,7 +66,7 @@ function addAI(operation) {
           {{ $t('blocks.text') }}
         </button>
         <button
-          v-if="sourceBlockUuid"
+          v-if="sourceBlockUuid && canUseAI"
           type="button"
           class="add-option add-option-ai"
           @click="addAI('write-more-text')"
@@ -71,7 +75,7 @@ function addAI(operation) {
           {{ $t('blocks.aiWriteMoreText') }}
         </button>
         <button
-          v-if="sourceBlockUuid"
+          v-if="sourceBlockUuid && canUseAI"
           type="button"
           class="add-option add-option-ai"
           @click="addAI('write-new-chapter')"

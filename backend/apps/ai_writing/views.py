@@ -1,6 +1,7 @@
 from rest_framework import mixins, viewsets
 
 from .models import AIGenerationJob, AIGenerationLog
+from .permissions import HasAIAccess
 from .serializers import AIGenerationJobSerializer, AIGenerationLogSerializer
 from blog.permissions import IsOwner
 
@@ -11,7 +12,7 @@ class AIGenerationJobViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = AIGenerationJobSerializer
-    permission_classes = [IsOwner]
+    permission_classes = [HasAIAccess, IsOwner]
     lookup_field = 'uuid'
 
     def get_queryset(self):
@@ -32,7 +33,7 @@ class AIGenerationLogViewSet(
     viewsets.GenericViewSet,
 ):
     serializer_class = AIGenerationLogSerializer
-    permission_classes = [IsOwner]
+    permission_classes = [HasAIAccess, IsOwner]
     lookup_field = 'uuid'
 
     def get_queryset(self):
